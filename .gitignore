@@ -1,0 +1,38 @@
+.env
+postbacks.jsonl
+.venv/
+__pycache__/
+*.pyc
+*.swp
+limits.json
+ui_orders.jsonl
+scrip-master.csv
+auto.json
+auto_state.json
+auto_log.jsonl
+creds/
+active_broker.json
+webhooks.json
+added_brokers.json
+auto_state_*.json
+manual_state*.json
+
+# env variants (keep the example)
+.env.*
+!.env.example
+
+# logs
+*.log
+
+# python
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+venv/
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store

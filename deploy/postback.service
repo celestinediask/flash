@@ -1,0 +1,13 @@
+[Unit]
+Description=Broker postback receiver
+After=network.target
+
+[Service]
+# Adjust User and paths to match your server
+User=youruser
+WorkingDirectory=/opt/trade-ui
+ExecStart=/opt/trade-ui/.venv/bin/python postback_server.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

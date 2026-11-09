@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{APP_NAME}}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  :root { --bg:#0e1116; --fg:#e6e8eb; --hd:#161b22; --card:#171c24; --mut:#9aa4b2; --bd:#2d3542; --in:#0e1116; --on:#2f6feb; --errbg:#5a1f24; --okbg:#1c4a2e; --hov:#232b38; color-scheme: dark; }
+  :root { --s1:#3987e5; --pos:#1baf7a; --neg:#eb6834; }
+  :root.light { --s1:#2a78d6; --bg:#f4f5f7; --fg:#1b1f24; --hd:#fff; --card:#fff; --mut:#555; --bd:#bbb; --in:#fff; --on:#1b1f24; --errbg:#fdd; --okbg:#dfd; --hov:#eef; color-scheme: light; }
+  body { font: 14px system-ui, sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
+  header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--bd); background: var(--hd); color: var(--fg); padding: 10px 16px; display: flex; gap: 16px; align-items: center; }
+  header .sp { flex: 1; }
+  #menuWrap { position: relative; } #menu { position: absolute; right: 0; top: 36px; z-index: 20; background: var(--card); border: 1px solid var(--bd); border-radius: 6px; padding: 4px; display: grid; gap: 4px; min-width: 150px; box-shadow: 0 4px 12px #0006; }
+  #menu button { text-align: left; border: 0; }
+  #menu button:hover, #menu button:focus-visible { background: var(--hov); }
+  #theme, #menuBtn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+  #tokbox { display: flex; flex-direction: column; align-items: stretch; gap: 3px; font-size: 11px; line-height: 1.1; text-align: center; }
+  #tokbar { width: 120px; height: 8px; border-radius: 4px; background: var(--bd); overflow: hidden; }
+  #tokfill { display: block; height: 100%; width: 0; background: #0b6; transition: width .5s, background .5s; }
+  main { max-width: 960px; margin: 16px auto; padding: 0 12px; display: grid; gap: 16px; }
+  section { background: var(--card); border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 2px #0004; }
+  h2 { margin: 0 0 10px; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  label { display: grid; gap: 3px; font-size: 12px; color: var(--mut); }
+  input, select, button { font: inherit; padding: 6px 8px; border: 1px solid var(--bd); border-radius: 5px; background: var(--in); color: var(--fg); }
+  button { cursor: pointer; }
+  button.primary { background: #0b6; color: #fff; border-color: #0b6; }
+  button.sell { background: #d33; border-color: #d33; color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .seg { display: flex; } .seg button { border-radius: 0; flex: 1; } .seg button.on { background: var(--on); color: #fff; }
+  #side button.on[data-v="BUY"] { background: #0b6; border-color: #0b6; }
+  #side button.on[data-v="SELL"] { background: #d33; border-color: #d33; }
+  .copy svg, #logout svg { display: block; } .copy.done { color: #0b6; } code { word-break: break-all; }
+  .seg button:first-child { border-radius: 5px 0 0 5px; } .seg button:last-child { border-radius: 0 5px 5px 0; }
+  table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--bd); font-size: 13px; }
+  .msg { margin-top: 8px; padding: 8px; border-radius: 5px; display: none; white-space: pre-wrap; }
+  .msg.err { background: var(--errbg); display: block; } .msg.ok { background: var(--okbg); display: block; }
+  #results { position: absolute; background: var(--card); border: 1px solid var(--bd); border-radius: 5px; z-index: 5; max-height: 240px; overflow: auto; }
+  #results div { padding: 5px 8px; cursor: pointer; } #results div:hover { background: var(--hov); }
+  #login { max-width: 300px; margin: 80px auto; }
+  #modal { position: fixed; inset: 0; background: #0008; display: none; align-items: center; justify-content: center; }
+  #jsonModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
+  .perf { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--bd); position: relative; }
+  .perf h3 { margin: 0 0 4px; font-size: 13px; } .perf .st { font-size: 12px; color: var(--mut); margin-bottom: 6px; } .perf .st b { color: var(--fg); }
+  .perf svg { width: 100%; height: auto; display: block; touch-action: none; } .perf text { fill: var(--mut); font-size: 10px; }
+  .perf .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--bd); border-radius: 5px; padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px #0005; display: none; }
+  #jsonModal > div { background: var(--card); padding: 18px; border-radius: 8px; width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
+  body:has(#jsonModal:not(.hidden)), body:has(#perfModal:not(.hidden)) { overflow: hidden; }
+  #addModal, #brokerModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
+  #addModal > div, #brokerModal > div { background: var(--card); padding: 18px; border-radius: 8px; width: min(560px, 94vw); max-height: 88vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+  #brokerModal section { box-shadow: none; border: 1px solid var(--bd); }
+  body:has(#addModal:not(.hidden)), body:has(#brokerModal:not(.hidden)) { overflow: hidden; }
+  .round { width: 30px; height: 30px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+  .ibtn { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .req { color: #d33; margin-left: 2px; }
+  .brow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin: 4px 0; padding: 10px 12px; }
+  .brow .sp2 { flex: 1; }
+  .badge { font-size: 11px; font-weight: normal; padding: 1px 8px; border-radius: 10px; background: var(--bd); }
+  .badge.on { background: #0b6; color: #fff; }
+  #perfModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
+  #perfModal > div { background: var(--card); padding: 18px; border-radius: 8px; width: min(640px, 94vw); max-height: 85vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+  #jsonModal { overscroll-behavior: contain; }
+  #jsonPre { min-height: 0; overscroll-behavior: contain; margin: 0; overflow: auto; font-size: 12px; background: var(--in); border: 1px solid var(--bd); border-radius: 5px; padding: 10px; white-space: pre-wrap; word-break: break-all; }
+  #modal > div { background: var(--card); padding: 18px; border-radius: 8px; max-width: 420px; }
+  .refresh .ico { display: block; width: 14px; height: 14px; transform-origin: 50% 50%; } .refresh .ico svg { display: block; } .refresh { display: inline-flex; align-items: center; padding: 5px 7px; }
+  .plus { width: 28px; height: 28px; padding: 0; border-radius: 50%; background: transparent; line-height: 0; display: inline-flex; align-items: center; justify-content: center; } .plus svg { display: block; }
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
+  .modal .box { background: var(--card); border: 1px solid var(--bd); border-radius: 8px; padding: 16px; width: 100%; max-width: 720px; margin: auto; }
+  .ibtn { padding: 3px 5px; margin-left: 4px; line-height: 0; } .ibtn svg { display: block; } .ibtn.del:hover { color: #d33; }
+  .racts { display: flex; justify-content: flex-end; white-space: nowrap; } tr.sel td { background: var(--in); }
+  h2.hd { display: flex; align-items: center; justify-content: space-between; }
+  .sw { position: relative; display: inline-block; width: 38px; height: 22px; cursor: pointer; }
+  .sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; z-index: 1; }
+  .sw span { position: absolute; inset: 0; background: var(--bd); border-radius: 22px; transition: background .15s; }
+  .sw span::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; }
+  .sw input:checked + span { background: #0b6; } .sw input:checked + span::before { transform: translateX(16px); }
+  .sw input:focus-visible + span { outline: 2px solid var(--on); outline-offset: 2px; }
+  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
+  #brokerSave, #brokerVerify, #dtokSave, #dtokVerify { box-sizing: border-box; width: 96px; min-width: 96px; max-width: 96px; height: 32px; flex: none; text-align: center; white-space: nowrap; overflow: hidden; padding-left: 0; padding-right: 0; }
+  button.saved { opacity: .7; }
+  #brokerVerify.saved, #dtokVerify.saved { opacity: 1; background: #0b6; color: #fff; border-color: #0b6; } .refresh .ico.spin { animation: spin .3s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="login"><section>
+  <h2>Login</h2>
+  <label>Password <input id="pw" type="password" autocomplete="current-password"></label>
+  <p><button class="primary" id="loginBtn">Log in</button></p>
+  <div class="msg" id="loginMsg"></div>
+</section></div>
+
+<div id="app" class="hidden">
+<header>
+  <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span id="bal"></span><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select><span class="sp"></span>
+  <span id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></span> 
+  <button id="theme" title="Toggle theme" aria-label="Toggle theme"></button>
+<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="brokerLogin">Log in to broker</button><button id="logout" >Log out</button></div></div>
+</header>
+<main>
+  <section>
+    <h2>Webhook alerts <button id="ral" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+    <table id="alertsTbl"></table>
+  </section>
+
+  <section>
+    <h2>Logs <button id="rl" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+    <table id="autoLog"></table>
+  </section>
+
+  <section><h2>Positions <button id="rp" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="positions"></table></section>
+  <section><h2>Today's orders <button id="ro" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="orders"></table><div class="msg" id="ordersMsg"></div></section>
+  <section>
+    <h2 class="hd">Webhook automation (Chartink) <button id="hookNew" class="plus" title="New webhook" aria-label="New webhook"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></h2>
+    <table id="hookTable"></table>
+    <div class="msg" id="hookMsg"></div>
+    <div id="hookEdit" class="modal hidden"><div class="box" role="dialog" aria-modal="true" aria-labelledby="hookTitle">
+    <h3 id="hookTitle" style="font-size:14px;margin:14px 0 6px"></h3>
+    <p style="font-size:12px;color:var(--mut)">Webhook URL (keep secret): <code id="hook"></code> <button class="copy" data-src="hook" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <div class="grid">
+      <label><span>Name<span class="req">*</span></span> <input id="a_name" autocomplete="off"></label>
+      <label><span>Automation<span class="req">*</span></span> <select id="a_enabled"><option value="false">Off</option><option value="true">On</option></select></label>
+      <label><span>Mode<span class="req">*</span></span> <select id="a_mode"><option value="dry">DEMO (log only)</option><option value="live">LIVE (real orders)</option></select></label>
+      <label><span>Side<span class="req">*</span></span> <select id="a_side"><option>BUY</option><option>SELL</option></select></label>
+      <label><span>Product<span class="req">*</span></span> <select id="a_product"><option>INTRADAY</option><option>CNC</option><option>MARGIN</option><option>MTF</option></select></label>
+      <label><span>Order method<span class="req">*</span></span> <select id="a_order_method"><option value="market">Market (cancel at timeout, no retry)</option><option value="market_resend">Market + cancel &amp; retry (up to 5 times)</option><option value="limit">Limit with buffer (one attempt, cancel at timeout)</option></select></label>
+      <label id="lbl_limit_buffer"><span>Limit buffer %<span class="req">*</span></span> <input id="a_limit_buffer" inputmode="decimal" placeholder="0.3"></label>
+      <label><span>Stocks per alert<span class="req">*</span></span> <input id="a_stocks_per_alert" inputmode="numeric"></label>
+      <label><span>Max open positions<span class="req">*</span></span> <input id="a_max_positions" inputmode="numeric"></label>
+      <label><span>Max trades / day<span class="req">*</span></span> <input id="a_max_daily_trades" inputmode="numeric"></label>
+      <label><span>Capital per stock (₹)<span class="req">*</span></span> <input id="a_capital_per_stock" inputmode="decimal"></label>
+      <label><span>Max capital / day (₹)<span class="req">*</span></span> <input id="a_max_daily_capital" inputmode="decimal"></label>
+      <label>Max qty per order (optional) <input id="a_max_qty" inputmode="numeric"></label>
+      <label><span>TP % (0 = none)<span class="req">*</span></span> <input id="a_tp_pct" inputmode="decimal"></label>
+      <label><span>SL % (0 = none)<span class="req">*</span></span> <input id="a_sl_pct" inputmode="decimal"></label>
+      <label><span>Max daily loss (₹)<span class="req">*</span></span> <input id="a_max_daily_loss" inputmode="decimal"></label>
+      <label><span>Cooldown per symbol (min)<span class="req">*</span></span> <input id="a_cooldown_minutes" inputmode="numeric"></label>
+      <label><span>Window start (IST)<span class="req">*</span></span> <input id="a_window_start" placeholder="09:20"></label>
+      <label><span>Window end (IST)<span class="req">*</span></span> <input id="a_window_end" placeholder="15:10"></label>
+      <label><span>Exit time (IST)<span class="req">*</span></span> <input id="a_exit_time" placeholder="15:15"></label>
+      <label id="lbl_exit_timeout"><span>Timeout (sec<span id="req_timeout" class="req">*</span><span id="opt_timeout">, optional</span>) </span><input id="a_exit_timeout" inputmode="numeric" placeholder="60"></label>
+    </div>
+    <p style="font-size:12px;color:var(--mut)">LIVE also needs the master Trading switch above set to Enabled. At the exit time the automation cancels its leftover TP/SL orders and squares off the positions it opened (entries stop at that time; it works even if automation is switched off). Today: <span id="a_today"></span></p>
+    <div class="actions"><button id="hookClose">Close</button> <button id="saveAuto">Save</button></div>
+    <div class="msg" id="autoMsg"></div>
+    </div></div>
+  </section>
+
+  <section>
+    <h2>Global config</h2>
+    <div class="grid">
+      <label>Max capital per order (₹) <input id="maxCap" inputmode="decimal"></label>
+      <label>Trading <select id="enabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></label>
+    </div>
+    <div class="actions"><button id="saveLimits">Save</button></div>
+    <div class="msg" id="limMsg"></div>
+  </section>
+
+  <section>
+    <h2>Place order</h2>
+    <div class="grid">
+      <label style="position:relative">Symbol <input id="sym" autocomplete="off" placeholder="type 2+ letters"><div id="results" class="hidden"></div></label>
+      <label>Selected <input id="selected" readonly></label>
+      <label>Side <div class="seg" id="side"><button data-v="BUY" class="on">BUY</button><button data-v="SELL">SELL</button></div></label>
+      <label>Order type <div class="seg" id="otype"><button data-v="MARKET" class="on">MARKET</button><button data-v="LIMIT">LIMIT</button></div></label>
+      <label>Product <select id="product"><option>INTRADAY</option><option>CNC</option><option>MARGIN</option><option>MTF</option></select></label>
+      <label id="priceBox"><span id="priceLbl">Price</span> <input id="price" inputmode="decimal"></label>
+      <label>Quantity <input id="qty" inputmode="numeric" placeholder="optional"></label>
+      <label>Max capital (₹) <input id="maxcap" inputmode="decimal" required></label>
+      <label>TP / SL unit <select id="tpslu"><option value="PCT">% of price</option><option value="INR">₹ price</option></select></label>
+      <label>Target (TP) <input id="tp" inputmode="decimal" placeholder="optional"></label>
+      <label>Stop loss (SL) <input id="sl" inputmode="decimal" placeholder="optional"></label>
+    </div>
+    <p style="font-size:12px;color:#666">Live prices come from Yahoo Finance (free, unofficial; BSE is ~15 min delayed). For MARKET orders the server uses its own fresh quote for sizing and the capital check, and falls back to the price you enter only if no fresh quote is available. TP and SL (both in %) are tracked by this server, which sends a MARKET exit when the live price crosses them; they are not placed at the broker.</p>
+    <div class="actions"><button id="review">Review order</button></div>
+    <div class="msg" id="orderMsg"></div>
+  </section>
+
+
+  <section>
+    <h2 class="hd">Brokers <button id="addBrokerBtn" class="round" title="Add broker" aria-label="Add broker"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></h2>
+    <p style="font-size:12px;color:var(--mut)">Add the brokers you use (+), edit one to set up its login, or delete it. The active broker is the one orders go to. Switching is blocked while Trading or any webhook is on.</p>
+    <div id="brokerList"></div>
+    <div class="msg" id="brokerListMsg"></div>
+  </section>
+
+  <section>
+    <h2>Server IP <button id="ripBtn" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+    <p style="font-size:12px;color:var(--mut)">Whitelist this IP in your broker's API settings.</p>
+    <p><code id="serverIp">...</code> <button class="copy" data-src="serverIp" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <div class="msg" id="ipMsg"></div>
+  </section>
+</main>
+</div>
+
+<div id="modal"><div>
+  <h2>Confirm real order</h2><pre id="summary"></pre>
+  <button id="cancelModal">Cancel</button> <button id="confirm" class="primary">Place order</button>
+</div></div>
+
+<div id="addModal" class="hidden"><div role="dialog" aria-modal="true" aria-label="Add broker">
+  <h2>Add broker</h2><div id="addList"></div>
+  <div style="text-align:right"><button id="addClose">Close</button></div>
+</div></div>
+
+<div id="brokerModal" class="hidden"><div role="dialog" aria-modal="true" aria-labelledby="bmTitle">
+  <h2 class="hd"><span id="bmTitle"></span> <span id="bmActive" class="badge"></span></h2>
+  <div class="actions" id="bmBar"><button id="bmUse">Use this broker</button></div>
+  <div class="msg" id="bmMsg"></div>
+  <div id="cfgBox">
+    <h3 style="margin:4px 0">Settings</h3>
+    <div class="grid"><span id="cfgFields" style="display:contents"></span></div>
+    <div class="actions"><button id="cfgSave">Save</button></div>
+    <div class="msg" id="cfgMsg"></div>
+  </div>
+  <section>
+    <h2 class="hd"><span id="oauthTitle">API key</span> <label class="sw" title="Enable"><input type="checkbox" id="tgBroker"><span></span></label></h2>
+    <p style="font-size:12px;color:var(--mut)" id="oauthHelp"></p>
+    <p style="font-size:12px">Redirect URL: <code id="redirectUrl"></code> <button class="copy" data-src="redirectUrl" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><br>Postback URL (keep secret): <code id="postbackUrl"></code> <button class="copy" data-src="postbackUrl" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <div class="grid">
+      <label>App name <input id="b_name" autocomplete="off"></label>
+      <label>API key <input id="b_key" autocomplete="off" spellcheck="false"></label>
+      <label>API secret <input id="b_secret" type="password" autocomplete="new-password" spellcheck="false" placeholder="unchanged"></label>
+    </div>
+    <div class="actions"><span style="margin-right:auto"></span> <button id="brokerSave">Save</button> <button id="brokerVerify">Verify</button> <button id="brokerLogin2">Log in</button></div>
+    <div class="msg" id="brokerMsg"></div>
+  </section>
+
+  <section>
+    <h2 class="hd"><span id="tokenTitle">Access token</span> <label class="sw" title="Enable"><input type="checkbox" id="tgDat"><span></span></label></h2>
+    <p style="font-size:12px">Postback URL (keep secret): <code id="postbackUrl2"></code> <button class="copy" data-src="postbackUrl2" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <div class="grid">
+    <label>App name <input id="dtokName" autocomplete="off"></label>
+    <label>New daily token <input id="dtok" type="password" autocomplete="off" spellcheck="false" placeholder="unchanged"></label>
+    </div>
+    <div class="actions"><button id="dtokSave">Save</button> <button id="dtokVerify">Verify</button></div>
+    <div class="msg" id="dtokMsg"></div>
+  </section>
+  <div style="text-align:right"><button id="bmClose">Close</button></div>
+</div></div>
+
+<div id="perfModal" class="hidden"><div role="dialog" aria-modal="true" aria-labelledby="perfTitle">
+  <h2 id="perfTitle">Performance</h2><div id="perfBody"></div>
+  <div style="text-align:right"><button id="perfClose">Close</button></div>
+</div></div>
+
+<div id="jsonModal" class="hidden"><div role="dialog" aria-modal="true" aria-label="Webhook JSON">
+  <h2 id="jsonTitle">Webhook JSON</h2><pre id="jsonPre"></pre>
+  <div style="text-align:right"><button id="jsonClose">Close</button></div>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let sel = null, side = "BUY", otype = "MARKET";
+
+let activeBroker = "", bm = "";  // bm: the broker whose details window is open
+async function api(path, body, broker = bm || activeBroker) {  // credential calls are about one specific broker
+  if (/^(auth|broker-config)/.test(path) && broker) {
+    if (body === undefined) path += (path.includes("?") ? "&" : "?") + "broker=" + encodeURIComponent(broker);
+    else body = {...body, broker};
+  }
+  const r = await fetch("/api/" + path, body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (r.status === 401 && path !== "login") showLogin();
+  return {ok: r.ok, status: r.status, data: j};
+}
+function done(btn, r, msgEl) {  // success: button turns green "Saved" until a value changes; failure: show error
+  if (r.ok) { msgEl.className = "msg"; msgEl.textContent = ""; markSaved(btn); }
+  else msg(msgEl, r.data.error || "failed", false);
+}
+for (const b of ["saveLimits", "saveAuto", "dtokSave", "brokerSave"]) {
+  const reset = () => { const x = $(b); if (x.classList.contains("saved")) { x.classList.remove("saved"); x.textContent = "Save"; } };
+  const sec = $(b).closest("section"); sec.addEventListener("input", reset); sec.addEventListener("change", reset);
+}
+for (const [b, src] of [["brokerVerify", "oauth"], ["dtokVerify", "token"]]) {  // (VERIFY below holds the same pairs)  // "Verified" until anything in the section changes or is saved
+  const reset = () => { const x = $(b); if (x.classList.contains("saved")) { x.classList.remove("saved"); x.textContent = "Verify"; } };
+  const sec = $(b).closest("section"); sec.addEventListener("input", reset); sec.addEventListener("change", reset);
+  $(src === "oauth" ? "brokerSave" : "dtokSave").addEventListener("click", reset);
+  $(b).onclick = async () => {
+    const m = $(src === "oauth" ? "brokerMsg" : "dtokMsg"); $(b).disabled = true; $(b).textContent = "Verifying...";
+    const r = await api("auth/verify", {source: src}); $(b).disabled = false; $(b).textContent = "Verify";
+    if (r.ok) { m.className = "msg"; m.textContent = ""; $(b).textContent = "Verified"; $(b).classList.add("saved"); }
+    else msg(m, r.data.error || "verification failed", false); };
+}
+function markSaved(btn) { btn.textContent = "Saved"; btn.classList.add("saved"); }
+function msg(el, text, ok) { el.className = "msg " + (ok ? "ok" : "err"); el.textContent = text; }
+function showLogin() { $("app").classList.add("hidden"); $("login").classList.remove("hidden"); }
+function row(cells, tag = "td") {
+  const tr = document.createElement("tr");
+  for (const c of cells) { const e = document.createElement(tag); if (c instanceof Node) e.append(c); else e.textContent = c ?? ""; tr.append(e); }
+  return tr;
+}
+
+$("loginBtn").onclick = async () => {
+  const r = await api("login", {password: $("pw").value});
+  if (!r.ok) return msg($("loginMsg"), r.data.error || "failed", false);
+  $("pw").value = ""; start();
+};
+$("dtokSave").onclick = async () => {
+  const r = await api("auth/token", {token: $("dtok").value.trim(), app_name: $("dtokName").value});
+  done($("dtokSave"), r, $("dtokMsg"));
+  if (r.ok) { $("dtok").value = ""; refresh(); loadAuto(); }
+};
+$("pw").onkeydown = e => { if (e.key === "Enter") $("loginBtn").click(); };
+if (localStorage.theme === "light") document.documentElement.classList.add("light");
+document.addEventListener("click", e => {
+  const i = e.target.closest(".refresh")?.querySelector(".ico"); if (!i) return;
+  i.classList.remove("spin"); void i.offsetWidth; i.classList.add("spin");
+});
+const themeIcon = () => $("theme").textContent = document.documentElement.classList.contains("light") ? "☾" : "☀";
+themeIcon();
+$("menuBtn").onclick = e => { e.stopPropagation(); $("menu").classList.toggle("hidden"); };
+document.addEventListener("click", e => { if (!$("menuWrap").contains(e.target)) $("menu").classList.add("hidden"); });
+$("theme").onclick = () => { const l = document.documentElement.classList.toggle("light"); localStorage.theme = l ? "light" : "dark"; themeIcon(); };
+$("logout").onclick = async () => { if (!confirm("Log out?")) return; await api("logout", {}); showLogin(); };
+
+function seg(id, cb) {
+  $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return;
+    for (const x of $(id).children) x.classList.toggle("on", x === b); cb(b.dataset.v); };
+}
+seg("side", v => side = v);
+seg("otype", v => { otype = v; $("priceLbl").textContent = v === "LIMIT" ? "Limit price" : "Price (live quote used when fresh)"; });
+
+let t;
+$("sym").oninput = () => { clearTimeout(t); t = setTimeout(async () => {
+  const q = $("sym").value; const r = await api("search?q=" + encodeURIComponent(q));
+  const box = $("results"); box.textContent = "";
+  if (!r.ok || !r.data.length) return box.classList.add("hidden");
+  for (const s of r.data) { const d = document.createElement("div");
+    d.textContent = `${s.symbol} (${s.exchange.slice(0, 3)}) ${s.name}`;
+    d.onclick = () => { sel = s; loadQuote(); $("selected").value = `${s.symbol} ${s.exchange} #${s.security_id}`; $("sym").value = s.symbol; box.classList.add("hidden"); };
+    box.append(d); }
+  box.classList.remove("hidden"); }, 250); };
+
+async function loadQuote() {
+  $("price").placeholder = "fetching price...";
+  const r = await api(`quote?security_id=${sel.security_id}&exchange=${sel.exchange}`);
+  $("price").placeholder = "enter price manually";
+  if (!r.ok) return;
+  $("price").value = r.data.price;
+}
+$("price").onfocus = () => {};
+function orderBody() {
+  if (!sel) throw new Error("pick a symbol from the list");
+  const q = $("qty").value.trim(), c = $("maxcap").value.trim();
+  if (!c || !(Number(c) > 0)) throw new Error("max capital is required (greater than 0)");
+  if (q && !/^[1-9][0-9]*$/.test(q)) throw new Error("quantity must be a whole number >= 1");
+  return {security_id: sel.security_id, exchange: sel.exchange, side, order_type: otype, product: $("product").value,
+    price: otype === "LIMIT" ? $("price").value : undefined, ref_price: otype === "MARKET" ? $("price").value : undefined,
+    qty: $("qty").value, max_capital: $("maxcap").value, tp: $("tp").value, sl: $("sl").value, tp_unit: $("tpslu").value, sl_unit: $("tpslu").value};
+}
+$("review").onclick = async () => {
+  let body; try { body = orderBody(); } catch (e) { return msg($("orderMsg"), e.message, false); }
+  const r = await api("preview", body);
+  if (!r.ok) return msg($("orderMsg"), r.data.error, false);
+  const d = r.data;
+  $("summary").textContent = `${side} ${d.qty} x ${sel.symbol} (${sel.exchange})\n${otype} ${$("product").value}` +
+    `\nprice ${d.ref_price}${d.live ? " (live)" : " (your input)"}  value ₹${d.value}` + (d.internal_tpsl ? `\nTP ₹${d.tp}  SL ₹${d.sl} (tracked by this server, MARKET exit; not placed at the broker)` : "") +
+    (d.enabled ? "" : "\n\nTRADING IS DISABLED - enable it in Limits first");
+  $("confirm").className = side === "SELL" ? "sell" : "primary"; $("confirm").disabled = !d.enabled;
+  $("confirm").onclick = async () => {
+    $("confirm").disabled = true;
+    const p = await api("order", {...body, qty: String(d.qty), confirm: true});  // pin the previewed qty
+    $("modal").style.display = "none";
+    msg($("orderMsg"), JSON.stringify(p.data), p.ok); refresh();
+  };
+  $("modal").style.display = "flex";
+};
+$("cancelModal").onclick = () => $("modal").style.display = "none";
+
+async function refresh() { loadFunds(); loadPositions(); loadOrders(); }
+async function loadFunds() { const r = await api("funds"); if (r.ok) $("bal").textContent = "Balance ₹" + r.data.available; }
+async function loadLimits() { const r = await api("limits"); if (!r.ok) return;
+  $("maxCap").value = r.data.max_capital; $("enabled").value = String(r.data.trading_enabled);
+  markSaved($("saveLimits")); }
+$("saveLimits").onclick = async () => {
+  const r = await api("limits", {max_capital: $("maxCap").value, trading_enabled: $("enabled").value === "true"});
+  done($("saveLimits"), r, $("limMsg")); loadLimits(); };
+async function loadPositions() { const r = await api("positions"); const t = $("positions"); t.textContent = "";
+  if (!r.ok || !Array.isArray(r.data)) return;
+  t.append(row(["Symbol", "Product", "Net qty", "Buy avg", "Sell avg", "Realized", "Unrealized", "P&L %"], "th"));
+  for (const p of r.data) {  // % = total P&L over the capital traded (the larger of bought / sold value)
+    const base = Math.max(p.buy_avg * p.buy_qty, p.sell_avg * p.sell_qty), pl = p.realized_pnl + p.unrealized_pnl;
+    const pct = base > 0 ? (pl / base * 100).toFixed(2) + "%" : "";
+    const tr = row([p.symbol, p.product, p.net_qty, p.buy_avg, p.sell_avg, p.realized_pnl, p.unrealized_pnl, pct]);
+    if (pct) tr.lastChild.style.color = pl > 0 ? "#0b6" : pl < 0 ? "#d33" : "";
+    t.append(tr); } }
+async function loadOrders() { const r = await api("orders"); const t = $("orders"); t.textContent = "";
+  if (!r.ok || !Array.isArray(r.data)) return;
+  t.append(row(["Time", "Symbol", "Side", "Type", "Qty", "Price", "Status", ""], "th"));
+  for (const o of r.data) {
+    const open = ["PENDING", "PARTIAL"].includes(o.status);
+    const b = document.createElement("button"); b.textContent = "cancel";
+    b.onclick = async () => { const c = await api("cancel", {order_id: o.order_id}); msg($("ordersMsg"), JSON.stringify(c.data), c.ok); loadOrders(); };
+    t.append(row([(o.time || "").slice(11), o.symbol, o.side, o.order_type, o.qty, o.price, o.status + (o.message ? " - " + o.message : ""), open ? b : ""])); } }
+$("rp").onclick = loadPositions; $("ro").onclick = loadOrders;
+
+
+const AUTO_NUM = ["stocks_per_alert","max_positions","max_daily_trades","capital_per_stock","max_daily_capital","max_qty","exit_timeout","limit_buffer","tp_pct","sl_pct","max_daily_loss","cooldown_minutes"];
+function syncMethod() {  // show only the fields the chosen order method uses
+  const m = $("a_order_method").value;
+  $("lbl_limit_buffer").classList.toggle("hidden", m !== "limit");
+  $("req_timeout").classList.toggle("hidden", m !== "market_resend");
+  $("opt_timeout").classList.toggle("hidden", m === "market_resend"); }
+$("a_order_method").onchange = syncMethod;
+const AUTO_TXT = ["mode","side","product","order_method","window_start","window_end","exit_time"];
+let hooks = [], hookId = null;
+const CHART_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/></svg>';
+const PENCIL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const TRASH_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+function iconBtn(svg, title, cls, fn) { const b = document.createElement("button"); b.className = "ibtn " + cls; b.innerHTML = svg; b.title = title; b.setAttribute("aria-label", title); b.onclick = fn; return b; }
+const SVGNS = "http://www.w3.org/2000/svg", rs = n => (n < 0 ? "-" : "") + "₹" + Math.abs(n).toFixed(2);
+function svgEl(tag, attrs, parent) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.append(e); return e; }
+async function openPerf(h) { const box = $("perfBody"); box.textContent = "Loading..."; $("perfTitle").textContent = h.name + " - performance"; $("perfModal").classList.remove("hidden");
+  const r = await api("webhooks/perf"); box.textContent = "";
+  if (!r.ok) { box.textContent = "Performance unavailable: " + (r.data.error || "error"); return; }
+  const d = r.data[h.id]; if (!d) { box.textContent = "No data."; return; }
+  const card = document.createElement("div"); card.className = "perf"; card.style.cssText = "margin:0;padding:0;border:0";
+  const st = document.createElement("div"); st.className = "st";
+  const wr = d.trades ? Math.round(d.wins / d.trades * 100) + "%" : "-";
+  st.innerHTML = `Total P&L <b></b> &middot; ${d.trades} closed trade${d.trades === 1 ? "" : "s"} &middot; win rate ${wr}` + (d.open ? ` &middot; ${d.open} not closed/matched` : "");
+  st.querySelector("b").textContent = rs(d.total); st.querySelector("b").style.color = d.total > 0 ? "var(--pos)" : d.total < 0 ? "var(--neg)" : "";
+  card.append(st);
+  if (!d.points.length) { const m = document.createElement("div"); m.className = "st"; m.textContent = "No closed trades yet."; card.append(m); }
+  else drawPerf(card, d.points);
+  box.append(card); }
+function drawPerf(card, pts) {  // cumulative realised P&L by day, zero baseline, hover for the day's numbers
+  const W = 600, H = 150, L = 44, R = 10, T = 8, B = 20, series = [{date: "start", pnl: 0, cum: 0}, ...pts];
+  const ys = series.map(p => p.cum), lo = Math.min(0, ...ys), hi = Math.max(0, ...ys), span = (hi - lo) || 1;
+  const X = i => L + i / (series.length - 1) * (W - L - R), Y = v => T + (hi - v) / span * (H - T - B);
+  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Cumulative realised P&L by day"});
+  const grid = v => { svgEl("line", {x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--bd)", "stroke-width": v === 0 ? 1.5 : 1}, svg);
+    svgEl("text", {x: L - 4, y: Y(v) + 3, "text-anchor": "end"}, svg).textContent = v.toFixed(span < 10 ? 2 : 0); };
+  grid(0); if (hi > 0) grid(hi); if (lo < 0) grid(lo);
+  svgEl("text", {x: L, y: H - 5}, svg).textContent = pts[0].date.slice(5);
+  if (pts.length > 1) svgEl("text", {x: W - R, y: H - 5, "text-anchor": "end"}, svg).textContent = pts[pts.length - 1].date.slice(5);
+  svgEl("polyline", {points: series.map((p, i) => X(i) + "," + Y(p.cum)).join(" "), fill: "none", stroke: "var(--s1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+  const dot = svgEl("circle", {r: 4, fill: "var(--s1)", stroke: "var(--card)", "stroke-width": 2, visibility: "hidden"}, svg);
+  const tip = document.createElement("div"); tip.className = "tip";
+  const show = ev => { const b = svg.getBoundingClientRect(), x = (ev.clientX - b.left) / b.width * W;
+    let i = Math.round((x - L) / ((W - L - R) / (series.length - 1))); i = Math.max(1, Math.min(series.length - 1, i)); const p = series[i];
+    dot.setAttribute("cx", X(i)); dot.setAttribute("cy", Y(p.cum)); dot.setAttribute("visibility", "visible");
+    tip.textContent = `${p.date}  day ${rs(p.pnl)}  total ${rs(p.cum)}`; tip.style.display = "block";
+    tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, X(i) / W * b.width - tip.offsetWidth / 2)) + "px"; tip.style.top = (svg.offsetTop + Y(p.cum) / H * b.height - 34) + "px"; };
+  svg.onpointermove = show; svg.onpointerdown = show; svg.onpointerleave = () => { dot.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  card.append(svg, tip); }
+function renderHooks() { const t = $("hookTable"); t.textContent = "";
+  t.append(row(["Name", "Status", "Mode", "Side", "Trades", "Value (₹)", ""], "th"));
+  for (const h of hooks) {
+    const u = document.createElement("span"); u.hidden = true; u.id = "hu_" + h.id; u.textContent = h.url;
+    const cp = document.createElement("button"); cp.className = "copy ibtn"; cp.dataset.src = u.id; cp.title = "Copy webhook URL"; cp.setAttribute("aria-label", "Copy webhook URL"); cp.innerHTML = COPY_SVG;
+    const acts = document.createElement("span"); acts.className = "racts";
+    acts.append(u, cp, iconBtn(CHART_SVG, "Performance", "", () => openPerf(h)), iconBtn(PENCIL_SVG, "Edit", "", () => editHook(h.id)), iconBtn(TRASH_SVG, "Delete", "del", () => delHook(h.id)));
+    const tr = row([h.name, h.rules.enabled ? "On" : "Off", h.rules.mode === "live" ? "LIVE" : "DEMO", h.rules.side, String(h.today.trades), String(h.today.capital), acts]);
+    if (h.id === hookId) tr.classList.add("sel"); t.append(tr); } }
+function editHook(id) { hookId = id; const h = hooks.find(x => x.id === id); if (!h) return;
+  $("hookTitle").textContent = "Edit: " + h.name; $("hook").textContent = h.url; $("a_name").value = h.name; $("a_enabled").value = String(h.rules.enabled);
+  for (const k of AUTO_NUM.concat(AUTO_TXT)) $("a_" + k).value = (k === "max_qty" || k === "exit_timeout") && !h.rules[k] ? "" : h.rules[k];
+  syncMethod();
+  $("a_today").textContent = `${h.today.trades} trades, ₹${h.today.capital} used`; markSaved($("saveAuto")); $("autoMsg").textContent = "";
+  $("hookEdit").classList.remove("hidden"); renderHooks(); }
+function closeHook() { hookId = null; $("hookEdit").classList.add("hidden"); renderHooks(); }
+async function loadAuto() { const r = await api("webhooks"); if (!r.ok) return;
+  hooks = r.data; if (hookId && !hooks.some(x => x.id === hookId)) hookId = null;
+  if (hookId) editHook(hookId); else closeHook(); }
+$("hookClose").onclick = closeHook;
+$("hookEdit").onmousedown = e => { if (e.target === $("hookEdit")) closeHook(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("hookEdit").classList.contains("hidden")) closeHook(); });
+$("hookNew").onclick = async () => {
+  const name = (prompt("Name for the new webhook:") || "").trim(); if (!name) return;
+  const r = await api("webhooks", {name}); if (!r.ok) return msg($("hookMsg"), r.data.error || "failed", false);
+  hookId = r.data.id; loadAuto(); };
+async function delHook(id) {
+  const h = hooks.find(x => x.id === id); if (!h || !confirm(`Delete webhook "${h.name}"? Its URL stops working.`)) return;
+  const r = await api("webhooks/" + id + "/delete", {}); if (!r.ok) return msg($("hookMsg"), r.data.error || "failed", false);
+  if (hookId === id) hookId = null; loadAuto(); }
+$("saveAuto").onclick = async () => {
+  const b = {name: $("a_name").value, enabled: $("a_enabled").value === "true"};
+  for (const k of AUTO_NUM.concat(AUTO_TXT)) b[k] = $("a_" + k).value;
+  const r = await api("webhooks/" + hookId, b); done($("saveAuto"), r, $("autoMsg")); if (r.ok) loadAuto(); };
+const COPY_SVG = document.querySelector(".copy").innerHTML, TICK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+document.addEventListener("click", async e => {
+  const b = e.target.closest(".copy"); if (!b) return;
+  try { await navigator.clipboard.writeText($(b.dataset.src).textContent); } catch (err) { return; }
+  clearTimeout(b.timer); b.innerHTML = TICK_SVG; b.classList.add("done");
+  b.timer = setTimeout(() => { b.innerHTML = COPY_SVG; b.classList.remove("done"); }, 5000);
+});
+async function loadLogDays() { const r = await api("auto/log/dates"); if (!r.ok) return;
+  const cur = $("logDay").value; $("logDay").textContent = "";
+  r.data.forEach((d, i) => $("logDay").append(new Option(i === 0 ? d + " (today)" : d, d)));
+  $("logDay").value = r.data.includes(cur) ? cur : r.data[0]; }
+$("logDay").onchange = () => loadAutoLog();
+function showBox(title, text) { $("jsonTitle").textContent = title; $("jsonPre").textContent = text; $("jsonModal").classList.remove("hidden"); }
+async function loadAutoLog() { const day = $("logDay").value; const r = await api("auto/log" + (day ? "?date=" + day : "")); const t = $("autoLog"); t.textContent = "";
+  if (!r.ok) return; if (!r.data.length) { t.append(row(["No webhook activity on this day."])); paintAlerts([]); return; }
+  t.append(row(["Time", "Webhook", "Mode", "Scan", "Info", "Orders", "Details"], "th"));
+  for (const e of r.data) {
+    const exit = e.event === "exit", tpsl = e.event === "tpsl_exit", man = e.event === "manual", tmo = e.event === "tpsl_exit_timeout" || e.event === "entry_timeout" || e.event === "entry_resend";
+    const n = tmo ? 0 : man ? (e.code === 200 ? 1 : 0) : tpsl ? (e.http === 200 ? 1 : 0) : exit ? (e.steps || []).filter(x => /^(BUY|SELL|DEMO would) /.test(x)).length
+                   : (e.decisions || []).filter(d => d.action === "PLACED" || /^DEMO/.test(d.action)).length;
+    const vb = document.createElement("button"); vb.textContent = "View"; vb.style.padding = "2px 8px";
+    vb.onclick = () => showBox(tmo ? "Unfilled order cancelled" : man ? "Manual order" : tpsl ? "TP/SL exit" : exit ? "Exit run" : "Alert result",
+      tmo ? JSON.stringify(e, null, 2) : man ? JSON.stringify({order: e.order, ref_price: e.ref_price, tp: e.tp, sl: e.sl, http: e.code, response: e.body}, null, 2) : tpsl ? JSON.stringify(e, null, 2) : exit ? JSON.stringify({time: e.time, still_open: e.still_open, steps: e.steps}, null, 2)
+           : JSON.stringify({status: e.status, pnl: e.pnl, decisions: e.decisions}, null, 2));
+    t.append(row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.mode || "live", tpsl || exit || man || tmo ? "" : e.scan, e.event === "entry_resend" ? `Re-sent entry: ${e.symbol} (attempt ${e.attempt})` : tmo ? `Cancelled unfilled ${e.event === "entry_timeout" ? "entry" : "exit"}: ${e.symbol} (after ${e.after}s)${e.gave_up ? " - not retried" : ""}` : man ? `${e.order.side} ${e.order.qty} ${e.symbol} @ ${e.order.price || "MARKET"} (${e.order.order_type})${e.code === 200 ? "" : " - " + ((e.body && e.body.error) || "failed")}` : tpsl ? `${e.reason} exit: ${e.symbol} @ ${e.price}` : exit ? "Exit " + (e.time || "") : "Alert", String(n), vb])); }
+  paintAlerts(r.data); }
+function alertSymbols(e) {  // "SYM@price" pairs from the payload; plain symbols when prices are missing
+  const p = e.payload || {}, list = x => (Array.isArray(x) ? x : String(x ?? "").split(",")).map(v => String(v).trim()).filter(Boolean);
+  const syms = list(p.stocks ?? p.symbol), px = list(p.trigger_prices);
+  if (!syms.length) return (e.symbols || []).join(", ");
+  return syms.map((s, i) => px[i] ? `${s}@${px[i]}` : s).join(", "); }
+function paintAlerts(data) {  // alerts received (newest first), each with its raw JSON
+  const t = $("alertsTbl"); t.textContent = ""; const al = data.filter(e => e.event === "alert");
+  if (!al.length) { t.append(row(["No webhook alerts received on this day."])); return; }
+  t.append(row(["Time", "Webhook", "Scan", "Symbols", "JSON"], "th"));
+  for (const e of al) {
+    const jb = document.createElement("button"); jb.textContent = "JSON"; jb.style.padding = "2px 8px";
+    jb.onclick = () => showBox("Webhook JSON", (e.payload !== undefined ? "" : "(webhook JSON not recorded for this alert; showing what was logged)\n") +
+      JSON.stringify(e.payload !== undefined ? e.payload : {scan: e.scan, symbols: e.symbols}, null, 2));
+    t.append(row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.scan, alertSymbols(e), jb])); } }
+$("perfClose").onclick = () => $("perfModal").classList.add("hidden");
+$("perfModal").onclick = e => { if (e.target === $("perfModal")) $("perfModal").classList.add("hidden"); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("perfModal").classList.add("hidden"); });
+$("jsonClose").onclick = () => $("jsonModal").classList.add("hidden");
+$("jsonModal").onclick = e => { if (e.target === $("jsonModal")) $("jsonModal").classList.add("hidden"); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("jsonModal").classList.add("hidden"); });
+$("rl").onclick = $("ral").onclick = async () => { await loadLogDays(); loadAutoLog(); };
+
+async function loadBroker() { const r = await api("auth/app"); if (!r.ok) return;
+  $("b_name").value = r.data.app_name; $("b_key").value = r.data.api_key; $("b_secret").placeholder = r.data.has_secret ? "unchanged" : "";
+  if (r.data.api_key) markSaved($("brokerSave")); }
+$("brokerSave").onclick = async () => {
+  const r = await api("auth/app", {app_name: $("b_name").value, api_key: $("b_key").value, api_secret: $("b_secret").value});
+  done($("brokerSave"), r, $("brokerMsg")); if (r.ok) { $("b_secret").value = ""; loadBroker(); } };
+async function loadDtok() { const r = await api("auth/token"); if (r.ok) { $("dtokName").value = r.data.app_name; if (r.data.app_name && r.data.has_token) markSaved($("dtokSave")); } }
+
+function applyMode(m) { $("tgBroker").checked = m.oauth; $("tgDat").checked = m.token;
+  $("brokerLogin2").disabled = !m.oauth;  // editing/saving the key is allowed even when the toggle is off
+  if (bm === activeBroker) $("brokerLogin").disabled = !m.oauth; }
+let tokExp = 0, tokIss = 0;
+function paintTok() {
+  const left = tokExp - Date.now() / 1000, total = Math.max(1, tokExp - tokIss), f = $("tokfill");
+  if (left <= 0) { f.style.width = "0"; $("toktxt").textContent = "No valid token"; return; }
+  const frac = Math.min(1, left / total), h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60);
+  f.style.width = (frac * 100) + "%"; f.style.background = frac > .5 ? "#0b6" : frac > .2 ? "#e9a100" : "#d33";
+  $("toktxt").textContent = h + "h " + m + "m left"; }
+setInterval(paintTok, 30000);
+async function loadBrokerTok() { const r = await api("auth/status", undefined, activeBroker); if (!r.ok) return false;
+  tokExp = r.data.valid ? r.data.expiry : 0; tokIss = r.data.issued || (tokExp - 86400); paintTok(); return r.data.valid; }
+async function startLogin(name, msgEl) {
+  const r = await api("auth/login", {}, name);
+  if (!r.ok) return msg(msgEl, r.data.error || "failed", false);
+  window.open(r.data.url, "_blank", "noopener"); msg(msgEl, "Log in on the broker tab, then come back here.", true);
+  const t = setInterval(async () => {
+    const s = await api("auth/status", undefined, name);
+    if (s.ok && s.data.valid) { clearInterval(t); msgEl.textContent = ""; if (name === activeBroker) { loadBrokerTok(); refresh(); } } }, 3000);
+  setTimeout(() => clearInterval(t), 600000); }
+$("brokerLogin").onclick = () => startLogin(activeBroker, $("brokerListMsg"));
+$("brokerLogin2").onclick = () => startLogin(bm, $("brokerMsg"));
+async function loadAuthInfo() {  // labels and which credential sections apply to the broker in the details window
+  const r = await api("auth"); if (!r.ok) return; const d = r.data, has = k => d.kinds.includes(k);
+  $("bmTitle").textContent = d.display_name;
+  $("oauthTitle").textContent = d.oauth_label; $("tokenTitle").textContent = d.token_label;
+  $("oauthHelp").textContent = d.oauth_help;
+  $("redirectUrl").textContent = d.redirect_url; $("postbackUrl").textContent = d.postback_url; $("postbackUrl2").textContent = d.postback_url;
+  $("tgBroker").closest("section").classList.toggle("hidden", !has("oauth"));
+  $("tgDat").closest("section").classList.toggle("hidden", !has("token")); }
+async function loadActiveInfo() {  // header labels for the active broker
+  const r = await api("auth", undefined, activeBroker); if (!r.ok) return;
+  $("brokerLogin").textContent = "Log in to " + r.data.display_name; $("tokbox").title = r.data.display_name + " login token expiry";
+  $("tokbox").classList.toggle("hidden", !r.data.kinds.includes("oauth"));
+  const m = await api("auth/mode", undefined, activeBroker); if (m.ok) $("brokerLogin").disabled = !m.data.oauth; }
+async function loadBrokers() {
+  const r = await api("brokers"); if (!r.ok) return; activeBroker = r.data.active;
+  const box = $("brokerList"); box.textContent = ""; $("brokerList").dataset.addable = JSON.stringify(r.data.addable);
+  if (!r.data.added.length) box.textContent = "No brokers added yet.";
+  for (const b of r.data.added) {
+    const x = document.createElement("div"); x.className = "brow";
+    const n = document.createElement("b"); n.textContent = b.label;
+    const st = document.createElement("span"); st.className = "badge" + (b.active ? " on" : ""); st.textContent = b.active ? "Active" : b.configured ? "Ready" : "Needs setup";
+    const sp = document.createElement("span"); sp.className = "sp2";
+    const ed = document.createElement("button"); ed.className = "ibtn"; ed.title = "Edit " + b.label; ed.setAttribute("aria-label", ed.title); ed.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`; ed.onclick = () => openBroker(b.name);
+    const del = document.createElement("button"); del.className = "ibtn"; del.title = "Delete " + b.label; del.setAttribute("aria-label", del.title); del.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>`;
+    del.onclick = () => deleteBroker(b);
+    x.append(n, st, sp, ed, del); box.append(x); }
+  $("addBrokerBtn").disabled = !r.data.addable.length; }
+async function deleteBroker(b) {
+  if (b.active) return msg($("brokerListMsg"), "This is the active broker. Make another broker active first.", false);
+  if (!confirm("Delete " + b.label + "? Its saved login and settings will be erased from this server.")) return;
+  const r = await api("brokers/remove", {name: b.name});
+  if (r.ok) { $("brokerListMsg").textContent = ""; loadBrokers(); } else msg($("brokerListMsg"), r.data.error || "failed", false); }
+async function loadConfig() {
+  const r = await api("broker-config"); if (!r.ok) return; const box = $("cfgFields"); box.textContent = "";
+  for (const f of r.data.fields) {
+    const l = document.createElement("label"), i = document.createElement("input");
+    i.id = "cfg_" + f.name; i.value = f.value; i.autocomplete = "off"; i.spellcheck = false; i.dataset.name = f.name;
+    l.append(f.label + " ", i); box.append(l); }
+  $("cfgBox").classList.toggle("hidden", !r.data.fields.length);
+  if (r.data.configured && r.data.fields.length) markSaved($("cfgSave")); }
+$("cfgSave").onclick = async () => {
+  const body = {}; for (const i of $("cfgFields").querySelectorAll("input")) body[i.dataset.name] = i.value;
+  const r = await api("broker-config", body); done($("cfgSave"), r, $("cfgMsg")); loadBrokers(); };
+$("cfgFields").addEventListener("input", () => { $("cfgSave").classList.remove("saved"); $("cfgSave").textContent = "Save"; });
+const VERIFY = [["brokerVerify", "oauth"], ["dtokVerify", "token"]];
+async function loadVerified() { const r = await api("auth/verified");
+  for (const [b, src] of VERIFY) { const on = r.ok && r.data[src]; $(b).textContent = on ? "Verified" : "Verify"; $(b).classList.toggle("saved", on); } }
+async function openBroker(name) {
+  bm = name; for (const id of ["cfgSave", "brokerSave", "dtokSave"]) { $(id).classList.remove("saved"); $(id).textContent = "Save"; }
+  for (const id of ["bmMsg", "cfgMsg", "brokerMsg", "dtokMsg"]) { $(id).textContent = ""; $(id).className = "msg"; }
+  $("b_secret").value = ""; $("dtok").value = "";
+  const info = (await api("brokers")).data, me = info.added.find(b => b.name === name);
+  $("bmActive").textContent = me && me.active ? "Active" : ""; $("bmActive").className = "badge" + (me && me.active ? " on" : "");
+  $("bmBar").classList.toggle("hidden", !!(me && me.active));
+  $("brokerModal").classList.remove("hidden");
+  await Promise.all([loadAuthInfo(), loadConfig(), loadBroker(), loadDtok(), loadMode(), loadVerified()]); }
+function closeBroker() { $("brokerModal").classList.add("hidden"); bm = ""; loadBrokers(); loadActiveInfo(); loadBrokerTok(); }
+$("bmClose").onclick = closeBroker;
+$("brokerModal").onclick = e => { if (e.target === $("brokerModal")) closeBroker(); };
+$("bmUse").onclick = async () => {
+  const r = await api("brokers", {name: bm});
+  if (!r.ok) return msg($("bmMsg"), r.data.error || "failed", false);
+  activeBroker = bm; closeBroker(); refresh(); };
+$("addBrokerBtn").onclick = () => {
+  const box = $("addList"); box.textContent = "";
+  for (const b of JSON.parse($("brokerList").dataset.addable || "[]")) {
+    const x = document.createElement("button"); x.className = "brow"; x.textContent = b.label;
+    x.onclick = async () => { await api("brokers/add", {name: b.name}); $("addModal").classList.add("hidden"); await loadBrokers(); openBroker(b.name); };
+    box.append(x); }
+  $("addModal").classList.remove("hidden"); };
+$("addClose").onclick = () => $("addModal").classList.add("hidden");
+$("addModal").onclick = e => { if (e.target === $("addModal")) $("addModal").classList.add("hidden"); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") { $("addModal").classList.add("hidden"); if (!$("brokerModal").classList.contains("hidden")) closeBroker(); } });
+async function loadMode() { const r = await api("auth/mode"); if (r.ok) applyMode(r.data); }
+for (const [id, src, msgId] of [["tgBroker", "oauth", "brokerMsg"], ["tgDat", "token", "dtokMsg"]]) {
+  $(id).onchange = async () => {
+    const r = await api("auth/mode", {source: src, enabled: $(id).checked});
+    if (r.ok) { applyMode(r.data); $(msgId).className = "msg"; $(msgId).textContent = ""; }
+    else { msg($(msgId), r.data.error || "failed", false); loadMode(); } };
+}
+async function loadIp(fresh) { const r = await api("server-ip" + (fresh ? "?fresh=1" : ""));
+  if (r.ok) { $("serverIp").textContent = r.data.ip; $("ipMsg").className = "msg"; } else msg($("ipMsg"), r.data.error, false); }
+$("ripBtn").onclick = () => loadIp(true);
+
+async function start() {
+  const r = await api("limits"); if (!r.ok) return showLogin();
+  $("login").classList.add("hidden"); $("app").classList.remove("hidden"); loadLimits(); loadAuto(); loadBrokers().then(() => { loadActiveInfo(); loadBrokerTok(); }); loadIp(); loadLogDays().then(loadAutoLog); refresh();
+}
+start();
+</script>
+</body>
+</html>
