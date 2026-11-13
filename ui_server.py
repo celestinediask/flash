@@ -652,8 +652,7 @@ def set_limits():
     if not (0 < new["max_capital"] <= 10_000_000):
         return bad("limits out of range")
     with _lock:
-        with open(LIMITS_FILE, "w") as f:
-            json.dump(new, f)
+        write_private(LIMITS_FILE, new)  # atomic: temp file + rename
         audit("limits", **new)
     return jsonify(new)
 
