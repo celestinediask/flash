@@ -102,6 +102,13 @@ def auto_log_days():
     return {r[0] for r in conn().execute("SELECT DISTINCT day FROM auto_log")}
 
 
+def latest_alert():
+    """(id, ts) of the newest webhook alert in the automation log, or None. Cheap enough to poll."""
+    r = conn().execute("SELECT id, ts FROM auto_log WHERE json_extract(data, '$.event') = 'alert' "
+                       "ORDER BY id DESC LIMIT 1").fetchone()
+    return (r[0], r[1]) if r else None
+
+
 def latest_postback(broker, order_id):
     """Newest pushed update for an order with a status, or None."""
     r = conn().execute("SELECT data FROM postbacks WHERE broker=? AND order_id=? AND status IS NOT NULL "

@@ -1626,6 +1626,13 @@ def auto_log_tail():
     return jsonify(list(reversed(_read_auto_log(day)))[:500])
 
 
+@app.get("/api/auto/alert/latest")
+def auto_alert_latest():
+    """Newest webhook alert's id/ts; the page polls this to play a sound when it changes."""
+    a = db.latest_alert()
+    return jsonify(id=a[0] if a else 0, ts=a[1] if a else 0)
+
+
 @app.get("/api/auto/log/dates")
 def auto_log_dates():
     days = db.auto_log_days() | {_log_day(e) for e in _manual_orders()}
