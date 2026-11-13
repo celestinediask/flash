@@ -99,7 +99,7 @@
   <span id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></span> 
   <button id="sound" title="Sound on new alert" aria-label="Sound on new alert" aria-pressed="true"></button>
   <button id="theme" title="Toggle theme" aria-label="Toggle theme"></button>
-<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="brokerLogin">Log in to broker</button><button id="logout" >Log out</button></div></div>
+<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="brokerLogin">Log in to broker</button><button id="soundTest">Test alert sound</button><button id="logout" >Log out</button></div></div>
 </header>
 <main>
   <section>
@@ -652,17 +652,20 @@ const SND_OFF = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" str
 let soundOn = true, actx = null, lastAlert = null;
 try { soundOn = localStorage.getItem("sound") !== "off"; } catch (e) {}
 function paintSound() { $("sound").innerHTML = soundOn ? SND_ON : SND_OFF; $("sound").setAttribute("aria-pressed", soundOn); }
-function beep() {  // two short tones; the audio context is only allowed after a click/key press on the page
+function beep() {  // loud alert: three rising two-tone pings, square wave at near-full volume (the audio context needs a prior click/key press)
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") actx.resume();
-    [880, 1175].forEach((f, i) => {
-      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + i * 0.18;
-      o.frequency.value = f; o.connect(g); g.connect(actx.destination);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-      o.start(t); o.stop(t + 0.17); });
+    const out = actx.createDynamicsCompressor(); out.connect(actx.destination);  // keeps the loud tones from clipping
+    const t0 = actx.currentTime + 0.05;
+    for (let k = 0; k < 3; k++) [988, 1319].forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = t0 + k * 0.55 + i * 0.22;
+      o.type = "square"; o.frequency.value = f; o.connect(g); g.connect(out);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.01); g.gain.setValueAtTime(0.9, t + 0.16); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      o.start(t); o.stop(t + 0.21); });
   } catch (e) {}
 }
+$("soundTest").onclick = () => { $("menu").classList.add("hidden"); beep(); };
 $("sound").onclick = () => { soundOn = !soundOn; try { localStorage.setItem("sound", soundOn ? "on" : "off"); } catch (e) {} paintSound(); if (soundOn) beep(); };
 for (const ev of ["click", "keydown"]) document.addEventListener(ev, () => { if (soundOn && !actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }, {once: false});
 paintSound();
