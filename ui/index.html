@@ -15,7 +15,7 @@
   #menuWrap { position: relative; } #menu { position: absolute; right: 0; top: 36px; z-index: 20; background: var(--card); border: 1px solid var(--bd); border-radius: 6px; padding: 4px; display: grid; gap: 4px; min-width: 150px; box-shadow: 0 4px 12px #0006; }
   #menu button { text-align: left; border: 0; }
   #menu button:hover, #menu button:focus-visible { background: var(--hov); }
-  #theme, #menuBtn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+  #theme, #menuBtn, #sound { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
   #tokbox { display: flex; flex-direction: column; align-items: stretch; gap: 3px; font-size: 11px; line-height: 1.1; text-align: center; }
   #tokbar { width: 120px; height: 8px; border-radius: 4px; background: var(--bd); overflow: hidden; }
   #tokfill { display: block; height: 100%; width: 0; background: #0b6; transition: width .5s, background .5s; }
@@ -97,9 +97,9 @@
 <header>
   <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span id="bal"></span><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select><span class="sp"></span>
   <span id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></span> 
-  <button id="sound" title="Sound on new alert" aria-label="Sound on new alert" aria-pressed="true"></button>
+  <button id="sound" title="Test alert sound" aria-label="Test alert sound"></button>
   <button id="theme" title="Toggle theme" aria-label="Toggle theme"></button>
-<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="brokerLogin">Log in to broker</button><button id="soundTest">Test alert sound</button><button id="logout" >Log out</button></div></div>
+<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="brokerLogin">Log in to broker</button><button id="logout" >Log out</button></div></div>
 </header>
 <main>
   <section>
@@ -155,6 +155,7 @@
     <div class="grid">
       <label>Max capital per order (₹) <input id="maxCap" inputmode="decimal"></label>
       <label>Trading <select id="enabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></label>
+      <label title="Saved in this browser only; applies immediately">Alert sound (this browser) <select id="soundSel"><option value="on">On</option><option value="off">Off</option></select></label>
     </div>
     <div class="actions"><button id="saveLimits">Save</button></div>
     <div class="msg" id="limMsg"></div>
@@ -648,10 +649,9 @@ $("ripBtn").onclick = () => loadIp(true);
 
 // ---- sound on new webhook alert: poll the newest alert id, beep when it changes ----
 const SND_ON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
-const SND_OFF = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6m0-6 6 6"/></svg>';
 let soundOn = true, actx = null, lastAlert = null;
 try { soundOn = localStorage.getItem("sound") !== "off"; } catch (e) {}
-function paintSound() { $("sound").innerHTML = soundOn ? SND_ON : SND_OFF; $("sound").setAttribute("aria-pressed", soundOn); }
+function paintSound() { $("sound").innerHTML = SND_ON; $("soundSel").value = soundOn ? "on" : "off"; }
 function beep() {  // loud alert: three rising two-tone pings, square wave at near-full volume (the audio context needs a prior click/key press)
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
@@ -665,8 +665,9 @@ function beep() {  // loud alert: three rising two-tone pings, square wave at ne
       o.start(t); o.stop(t + 0.21); });
   } catch (e) {}
 }
-$("soundTest").onclick = () => { $("menu").classList.add("hidden"); beep(); };
-$("sound").onclick = () => { soundOn = !soundOn; try { localStorage.setItem("sound", soundOn ? "on" : "off"); } catch (e) {} paintSound(); if (soundOn) beep(); };
+$("sound").onclick = beep;  // top-bar button: play the alert sound as a test, whatever the setting
+$("soundSel").addEventListener("change", e => e.stopPropagation());  // not part of the Save form
+$("soundSel").onchange = () => { soundOn = $("soundSel").value === "on"; try { localStorage.setItem("sound", soundOn ? "on" : "off"); } catch (e) {} };
 for (const ev of ["click", "keydown"]) document.addEventListener(ev, () => { if (soundOn && !actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }, {once: false});
 paintSound();
 async function pollAlert() {
