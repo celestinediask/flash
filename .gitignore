@@ -1,16 +1,12 @@
 .env
-postbacks.jsonl
 flash.db*
 .venv/
 __pycache__/
 *.pyc
 *.swp
 limits.json
-ui_orders.jsonl
 scrip-master.csv
-auto.json
 auto_state.json
-auto_log.jsonl
 creds/
 active_broker.json
 webhooks.json

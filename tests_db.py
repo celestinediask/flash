@@ -21,15 +21,6 @@ assert db.latest_postback("dhan", "7")["status"] == "FILLED"
 assert db.latest_postback("dhan", 7)["status"] == "FILLED"
 assert db.latest_postback("dhan", "8") is None
 
-# import: good + bad lines, idempotent, old-format postback without broker
-p = os.path.join(d, "postbacks.jsonl")
-open(p, "w").write(json.dumps({"received": 5, "orderId": "1"}) + "\nnot json\n" +
-                   json.dumps({"received": 6, "broker": "dhan", "order_id": "9", "status": "FILLED"}) + "\n")
-assert db.import_jsonl(p, "postbacks") == (2, 1)
-assert db.import_jsonl(p, "postbacks") is None
-assert db.latest_postback("dhan", "9")["received"] == 6
-assert db.import_jsonl(os.path.join(d, "missing.jsonl"), "audit") is None
-
 # concurrent writers from several threads + a second connection path
 def w(i):
     for j in range(50):

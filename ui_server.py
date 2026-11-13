@@ -37,7 +37,6 @@ for _k in ("UI_PASSWORD_HASH", "UI_SECRET_KEY", "ALERT_SECRET"):
 LIMITS_FILE = os.path.join(HERE, "limits.json")
 ACTIVE_FILE = os.path.join(HERE, "active_broker.json")  # broker chosen in the UI
 CREDS_DIR = os.path.join(HERE, "creds")  # per-broker credential files, 0600 inside a 0700 dir
-AUTO_FILE = os.path.join(HERE, "auto.json")
 AUTO_STATE = os.path.join(HERE, "auto_state.json")  # the "default" webhook; others use auto_state_<id>.json
 HOOKS_FILE = os.path.join(HERE, "webhooks.json")
 IST = zoneinfo.ZoneInfo("Asia/Kolkata")
@@ -261,10 +260,6 @@ def clean_name(v):
 
 def _is_key(v, lo, hi):
     return lo <= len(v) <= hi and v.replace("-", "").replace("_", "").replace(".", "").isalnum()
-
-
-def _tok_name():
-    return broker.token_label
 
 
 @app.get("/api/broker-config")
@@ -839,33 +834,17 @@ DEFAULT_AUTO = {
 _auto_lock = threading.Lock()  # serialises alerts so concurrent ones can't overshoot the caps
 
 
-def load_auto():
-    try:
-        with open(AUTO_FILE) as f:
-            return {**DEFAULT_AUTO, **json.load(f)}
-    except (OSError, ValueError):
-        return dict(DEFAULT_AUTO)
-
-
 MAX_HOOKS = 10
 
 
 def load_hooks():
-    """Named webhooks, each with its own secret URL and rules. First run migrates the single legacy webhook
-    (auto.json + ALERT_SECRET) into a "Default" hook so its URL and today's counters keep working."""
+    """Named webhooks, each with its own secret URL and rules. First run creates a "Default" hook
+    (secret = ALERT_SECRET, default rules)."""
     h = read_json(HOOKS_FILE).get("hooks")
     if not h:
-        h = [{"id": "default", "name": "Default", "secret": os.environ["ALERT_SECRET"], "rules": load_auto()}]
+        h = [{"id": "default", "name": "Default", "secret": os.environ["ALERT_SECRET"], "rules": dict(DEFAULT_AUTO)}]
         write_private(HOOKS_FILE, {"hooks": h})  # no _lock: callers may already hold it; runs once at startup
-    return [{**x, "rules": {**DEFAULT_AUTO, **_migrate_rules(x["rules"])}} for x in h]
-
-
-def _migrate_rules(r):
-    """Webhooks saved before order methods existed: keep what they did (LIMIT = limit at the live price, no buffer)."""
-    if "order_method" in r:
-        return r
-    limit = r.get("order_type") == "LIMIT"
-    return {**r, "order_method": "limit" if limit else "market", "limit_buffer": 0.0}
+    return [{**x, "rules": {**DEFAULT_AUTO, **x["rules"]}} for x in h]
 
 
 def save_hooks(h):  # caller holds _lock
@@ -1139,7 +1118,7 @@ def run_auto(payload, hook):
     return done(f"processed: {placed} order(s)", decisions, pnl=round(pnl, 2))
 
 
-LEGACY_STALE = 60  # seconds before the square-off cancels its own unfilled exit when no timeout is configured
+EXIT_STALE_SECS = 60  # seconds before the square-off cancels its own unfilled exit when no timeout is configured
 
 
 def run_exit(now, hook):
@@ -1183,7 +1162,7 @@ def run_exit(now, hook):
             sym, qty = p["symbol"], abs(p["net_qty"])
             prev = sent.get(sym)
             if prev and status.get(prev["order_id"]) in (*OPEN_STATUSES, "FILLED"):
-                if status[prev["order_id"]] != "FILLED" and time.time() - prev["ts"] > (rules["exit_timeout"] or LEGACY_STALE):
+                if status[prev["order_id"]] != "FILLED" and time.time() - prev["ts"] > (rules["exit_timeout"] or EXIT_STALE_SECS):
                     c, b = broker.cancel_order(prev['order_id'])  # stale; next attempt re-sends
                     log["steps"].append(f"cancel stale exit order {prev['order_id']} for {sym}: {c} {b}")
                 else:
@@ -1660,7 +1639,7 @@ def index():
 
 if __name__ == "__main__":
     load_scrips()
-    load_hooks()  # migrate the legacy single webhook before serving
+    load_hooks()  # create the Default webhook on first run
     port = int(os.environ.get("UI_PORT", 8081))
     host = os.environ.get("UI_HOST", "127.0.0.1")
     print(f"UI on {host}:{port}, {len(_scrips)} instruments", flush=True)
