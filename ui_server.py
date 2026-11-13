@@ -37,7 +37,6 @@ for _k in ("UI_PASSWORD_HASH", "UI_SECRET_KEY", "ALERT_SECRET"):
 LIMITS_FILE = os.path.join(HERE, "limits.json")
 ACTIVE_FILE = os.path.join(HERE, "active_broker.json")  # broker chosen in the UI
 CREDS_DIR = os.path.join(HERE, "creds")  # per-broker credential files, 0600 inside a 0700 dir
-AUTO_STATE = os.path.join(HERE, "auto_state.json")  # the "default" webhook; others use auto_state_<id>.json
 HOOKS_FILE = os.path.join(HERE, "webhooks.json")
 IST = zoneinfo.ZoneInfo("Asia/Kolkata")
 DEFAULT_LIMITS = {"max_capital": 100.0, "trading_enabled": False}
@@ -805,8 +804,7 @@ def place():
                 st = manual_state(datetime.datetime.now(IST).strftime("%Y-%m-%d"))
                 st["opened"][summary["_symbol"]] = {"order_ids": [str(body["order_id"])], "tick": summary["_watch"]["tick"],
                                                     "tpsl": {k: v for k, v in summary["_watch"].items() if k != "tick"}}
-                with open(MANUAL_STATE, "w") as f:
-                    json.dump(st, f)
+                db.set_state(MANUAL_SCOPE, st)
     return jsonify(body), code
 
 
@@ -851,8 +849,8 @@ def save_hooks(h):  # caller holds _lock
     write_private(HOOKS_FILE, {"hooks": h})
 
 
-def hook_state_path(hook):
-    return AUTO_STATE if hook["id"] == "default" else os.path.join(HERE, f"auto_state_{hook['id']}.json")
+def hook_scope(hook):  # key of this webhook's daily state row
+    return f"hook:{hook['id']}"
 
 
 TERMINAL = ("FILLED", "CANCELLED", "REJECTED")
@@ -958,13 +956,9 @@ def validate_auto(d):
 
 
 def auto_state(today, hook):
-    try:
-        with open(hook_state_path(hook)) as f:
-            st = json.load(f)
-        if st.get("date") == today:
-            return st
-    except (OSError, ValueError):
-        pass
+    st = db.get_state(hook_scope(hook))
+    if st and st.get("date") == today:
+        return st
     return {"date": today, "trades": 0, "capital": 0.0, "last": {}, "opened": {}, "exit_attempts": 0, "exit_done": False}
 
 
@@ -986,7 +980,7 @@ def parse_alert(payload):
 
 
 def run_auto(payload, hook):
-    rules, spath = hook["rules"], hook_state_path(hook)
+    rules, scope = hook["rules"], hook_scope(hook)
     symbols = parse_alert(payload)
     alert = {"scan": str(payload.get("scan_name") or payload.get("alert_name") or "")[:80], "symbols": symbols}
     now = datetime.datetime.now(IST)
@@ -1091,8 +1085,7 @@ def run_auto(payload, hook):
         state["trades"] += 1  # reserve before sending so a crash or retry can't double-spend the caps
         state["capital"] += value
         state["last"][sym] = time.time()
-        with open(spath, "w") as f:
-            json.dump(state, f)
+        db.set_state(scope, state)
         path = "/orders"
         audit("auto_order_submit", path=path, order=order)
         try:
@@ -1110,8 +1103,7 @@ def run_auto(payload, hook):
             o["tpsl"] = {"side": rules["side"], "tp_pct": rules["tp_pct"], "sl_pct": rules["sl_pct"],
                          "product": rules["product"], "ref": price, "ts": time.time()} if use_tpsl else None
             o.pop("tpsl_exit", None)  # new entry: re-arm
-            with open(spath, "w") as f:
-                json.dump(state, f)
+            db.set_state(scope, state)
         decisions.append({**d, "action": "PLACED" if code == 200 else "REJECTED", "http": code, "response": body})
         held.add(sym)
         placed += 1
@@ -1206,8 +1198,7 @@ def _exit_finish(state, log, hook, retry, save=True):
         if retry:
             log["steps"].append("GAVE UP after 5 attempts - positions may still be open, check the broker")
     if save:
-        with open(hook_state_path(hook), "w") as f:
-            json.dump(state, f)
+        db.set_state(hook_scope(hook), state)
     auto_log(**log)
 
 
@@ -1342,24 +1333,22 @@ def tpsl_check(now, hook):
     dirty = entry_timeout_scan(state, hook["name"], hook["rules"])
     dirty = tpsl_scan(state, hook["name"], hook["rules"]) or dirty
     if dirty:
-        with open(hook_state_path(hook), "w") as f:
-            json.dump(state, f)
+        db.set_state(hook_scope(hook), state)
 
 
-MANUAL_STATE = os.path.join(HERE, "manual_state.json")
+MANUAL_SCOPE = "manual"
 MANUAL_RULES = {"order_method": "market", "exit_timeout": 0, "limit_buffer": 0.0}  # manual orders use plain market exits
 
 
 def manual_state(today):
-    st = read_json(MANUAL_STATE)
-    return st if st.get("date") == today else {"date": today, "opened": {}}
+    st = db.get_state(MANUAL_SCOPE)
+    return st if st and st.get("date") == today else {"date": today, "opened": {}}
 
 
 def tpsl_check_manual(now):
     state = manual_state(now.strftime("%Y-%m-%d"))
     if tpsl_scan(state, "Manual", MANUAL_RULES):
-        with open(MANUAL_STATE, "w") as f:
-            json.dump(state, f)
+        db.set_state(MANUAL_SCOPE, state)
 
 
 def tpsl_loop():

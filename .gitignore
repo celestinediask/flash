@@ -6,13 +6,10 @@ __pycache__/
 *.swp
 limits.json
 scrip-master.csv
-auto_state.json
 creds/
 active_broker.json
 webhooks.json
 added_brokers.json
-auto_state_*.json
-manual_state*.json
 
 # env variants (keep the example)
 .env.*

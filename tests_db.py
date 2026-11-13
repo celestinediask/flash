@@ -21,6 +21,13 @@ assert db.latest_postback("dhan", "7")["status"] == "FILLED"
 assert db.latest_postback("dhan", 7)["status"] == "FILLED"
 assert db.latest_postback("dhan", "8") is None
 
+# state: replace semantics, per scope, JSON round-trip
+assert db.get_state("hook:x") is None
+db.set_state("hook:x", {"date": "d", "trades": 1, "opened": {"A": {"order_ids": ["1"]}}})
+db.set_state("hook:x", {"date": "d", "trades": 2})
+db.set_state("manual", {"date": "d", "opened": {}})
+assert db.get_state("hook:x") == {"date": "d", "trades": 2} and db.get_state("manual")["opened"] == {}
+
 # concurrent writers from several threads + a second connection path
 def w(i):
     for j in range(50):

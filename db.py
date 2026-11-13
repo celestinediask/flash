@@ -1,4 +1,4 @@
-"""SQLite storage for the append-only logs: audit, auto_log and postbacks.
+"""SQLite storage: the append-only logs (audit, auto_log, postbacks) and the per-scope daily state.
 
 One file (flash.db, or $DB_PATH) shared by ui_server.py and postback_server.py. WAL mode lets the two processes
 read and write at the same time. Every record is stored whole as JSON in `data`, so the dicts that come back are
@@ -27,6 +27,8 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS postbacks (
         id INTEGER PRIMARY KEY, ts REAL NOT NULL, broker TEXT, order_id TEXT, status TEXT, data TEXT NOT NULL)""",
     "CREATE INDEX IF NOT EXISTS postbacks_order ON postbacks(broker, order_id, id)",
+    # one row per scope ("hook:<id>" or "manual"): today's counters and armed TP/SL. A write is one atomic statement.
+    "CREATE TABLE IF NOT EXISTS state (scope TEXT PRIMARY KEY, ts REAL NOT NULL, data TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
 ]
 SCHEMA_VERSION = "1"
@@ -79,7 +81,17 @@ def add_postback(rec):
                     str(rec["order_id"]) if rec.get("order_id") else None, rec.get("status"), json.dumps(rec)))
 
 
+def set_state(scope, st):
+    conn().execute("INSERT OR REPLACE INTO state(scope, ts, data) VALUES (?,?,?)", (scope, time.time(), json.dumps(st)))
+
+
 # ---------- reads ----------
+def get_state(scope):
+    r = conn().execute("SELECT data FROM state WHERE scope=?", (scope,)).fetchone()
+    return json.loads(r[0]) if r else None
+
+
+
 def audit_events(*events):
     """Audit records (oldest first), optionally only the named event types."""
     sql, args = "SELECT data FROM audit", ()
