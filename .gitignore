@@ -1,5 +1,6 @@
 .env
 postbacks.jsonl
+flash.db*
 .venv/
 __pycache__/
 *.pyc

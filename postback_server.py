@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Receive broker order-update postbacks and append them to postbacks.jsonl.
+"""Receive broker order-update postbacks and store them in the flash.db `postbacks` table.
 
 Serves every registered broker that supports postbacks and has been configured (in the UI or .env).
 Env (via .env): POSTBACK_SECRET, optional POSTBACK_PORT (default 8080), POSTBACK_HOST
@@ -20,10 +20,10 @@ load_dotenv(os.path.join(HERE, ".env"))
 if not os.environ.get("POSTBACK_SECRET"):
     sys.exit("POSTBACK_SECRET not set. Add it to .env (see .env.example).")
 
+import db  # noqa: E402
 from brokers import REGISTRY, BrokerError, load_saved_config  # noqa: E402
 
 SECRET = os.environ["POSTBACK_SECRET"]
-LOG = os.path.join(HERE, "postbacks.jsonl")
 HANDLERS = {n: c(config=load_saved_config(HERE, n)) for n, c in REGISTRY.items()
             if c.supports_postback and c.is_configured(load_saved_config(HERE, n))}
 if not HANDLERS:
@@ -51,8 +51,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._reply(400)
 
-        with open(LOG, "a") as f:
-            f.write(json.dumps({"received": time.time(), "broker": parts[1], **event, "raw": data}) + "\n")
+        db.add_postback({"received": time.time(), "broker": parts[1], **event, "raw": data})
         print(f"{parts[1]} {event['order_id']} {event['symbol']} {event['side']} {event['status']} "
               f"filled={event.get('filled_qty')}/{event['qty']} {event['message']}", flush=True)
         self._reply(200)

@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from flask import Flask, g, has_request_context, jsonify, request, send_from_directory, session
 from werkzeug.security import check_password_hash
 
+import db
 from brokers import OPEN_STATUSES, REGISTRY, BrokerError, available, get_broker, load_saved_config
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,13 +35,11 @@ for _k in ("UI_PASSWORD_HASH", "UI_SECRET_KEY", "ALERT_SECRET"):
         sys.exit(f"{_k} not set. Add it to .env (see .env.example).")
 
 LIMITS_FILE = os.path.join(HERE, "limits.json")
-AUDIT_LOG = os.path.join(HERE, "ui_orders.jsonl")
 ACTIVE_FILE = os.path.join(HERE, "active_broker.json")  # broker chosen in the UI
 CREDS_DIR = os.path.join(HERE, "creds")  # per-broker credential files, 0600 inside a 0700 dir
 AUTO_FILE = os.path.join(HERE, "auto.json")
 AUTO_STATE = os.path.join(HERE, "auto_state.json")  # the "default" webhook; others use auto_state_<id>.json
 HOOKS_FILE = os.path.join(HERE, "webhooks.json")
-AUTO_LOG = os.path.join(HERE, "auto_log.jsonl")
 IST = zoneinfo.ZoneInfo("Asia/Kolkata")
 DEFAULT_LIMITS = {"max_capital": 100.0, "trading_enabled": False}
 
@@ -68,8 +67,7 @@ def load_limits():
 
 
 def audit(event, **kw):
-    with open(AUDIT_LOG, "a") as f:
-        f.write(json.dumps({"ts": time.time(), "event": event, **kw}) + "\n")
+    db.add_audit(event, **kw)
 
 
 def cpath(fname, name=None):
@@ -878,32 +876,12 @@ def hook_state_path(hook):
     return AUTO_STATE if hook["id"] == "default" else os.path.join(HERE, f"auto_state_{hook['id']}.json")
 
 
-POSTBACK_LOG = os.path.join(HERE, "postbacks.jsonl")  # written by postback_server.py
 TERMINAL = ("FILLED", "CANCELLED", "REJECTED")
-_pb = {"sig": None, "map": {}}
 
 
 def postback_status(oid):
-    """Newest pushed update for an order (this broker only), or None. Re-read only when the log changed."""
-    try:
-        st = os.stat(POSTBACK_LOG)
-    except OSError:
-        return None
-    sig = (st.st_mtime_ns, st.st_size)
-    if _pb["sig"] != sig:
-        with open(POSTBACK_LOG, "rb") as f:
-            f.seek(max(0, st.st_size - 262144))  # the tail is plenty: we only care about recent orders
-            lines = f.read().decode("utf-8", "ignore").splitlines()
-        m = {}
-        for line in lines:
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            if e.get("broker") == broker.name and e.get("order_id") and e.get("status"):
-                m[str(e["order_id"])] = e  # file order = arrival order, later lines win
-        _pb.update(sig=sig, map=m)
-    return _pb["map"].get(str(oid))
+    """Newest pushed update for an order (this broker only), or None."""
+    return db.latest_postback(broker.name, oid)
 
 
 def order_status(oid, confirm=False):
@@ -1012,8 +990,7 @@ def auto_state(today, hook):
 
 
 def auto_log(**kw):
-    with open(AUTO_LOG, "a") as f:
-        f.write(json.dumps({"ts": time.time(), **kw}) + "\n")
+    db.add_auto_log(**kw)
 
 
 def parse_alert(payload):
@@ -1611,45 +1588,31 @@ def _log_day(e):
 
 def _manual_orders():
     """Orders placed from the Place order form, rebuilt from the audit log (submit + result share a correlationId)."""
-    subs, out = {}, []
-    try:
-        with open(AUDIT_LOG) as f:
-            for line in f:
-                try:
-                    e = json.loads(line)
-                except ValueError:
-                    continue
-                cid = (e.get("order") or {}).get("correlationId") or e.get("correlationId")
-                if e.get("event") == "order_submit" and cid:
-                    o = e.get("intent")
-                    if not o:  # entry logged before the adapter layer: rebuild from the native Dhan payload
-                        n = e.get("order") or {}
-                        o = {"side": n.get("transactionType"), "qty": n.get("quantity"), "price": n.get("price"),
-                             "order_type": n.get("orderType"), "security_id": n.get("securityId"),
-                             "exchange": n.get("exchangeSegment")}
-                    sc = next((c for c in _scrips if c["security_id"] == str(o.get("security_id"))
-                               and c["exchange"] == o.get("exchange")), None)
-                    subs[cid] = {"ts": e["ts"], "event": "manual", "webhook": "Manual", "mode": "live",
-                                 "symbol": sc["symbol"] if sc else str(o.get("security_id")), "order": o, "ref_price": e.get("ref_price"), "tp": e.get("tp"), "sl": e.get("sl")}
-                elif e.get("event") in ("order_result", "order_error") and cid in subs:
-                    subs[cid].update(code=e.get("code", 0), body=e.get("body") or {"error": e.get("error")})
-    except OSError:
-        pass
+    subs = {}
+    for e in db.audit_events("order_submit", "order_result", "order_error"):
+        cid = (e.get("order") or {}).get("correlationId") or e.get("correlationId")
+        if e.get("event") == "order_submit" and cid:
+            o = e.get("intent")
+            if not o:  # entry logged before the adapter layer: rebuild from the native Dhan payload
+                n = e.get("order") or {}
+                o = {"side": n.get("transactionType"), "qty": n.get("quantity"), "price": n.get("price"),
+                     "order_type": n.get("orderType"), "security_id": n.get("securityId"),
+                     "exchange": n.get("exchangeSegment")}
+            sc = next((c for c in _scrips if c["security_id"] == str(o.get("security_id"))
+                       and c["exchange"] == o.get("exchange")), None)
+            subs[cid] = {"ts": e["ts"], "event": "manual", "webhook": "Manual", "mode": "live",
+                         "symbol": sc["symbol"] if sc else str(o.get("security_id")), "order": o, "ref_price": e.get("ref_price"), "tp": e.get("tp"), "sl": e.get("sl")}
+        elif e.get("event") in ("order_result", "order_error") and cid in subs:
+            subs[cid].update(code=e.get("code", 0), body=e.get("body") or {"error": e.get("error")})
     return list(subs.values())
 
 
-def _read_auto_log():  # the log is append-only and never trimmed
-    out = []
-    try:
-        with open(AUTO_LOG) as f:
-            for line in f:
-                try:
-                    out.append(json.loads(line))
-                except ValueError:
-                    pass
-    except OSError:
-        pass
-    return sorted(out + _manual_orders(), key=lambda e: e.get("ts", 0))
+def _read_auto_log(day=None):
+    """Automation log plus manual orders, oldest first; `day` (YYYY-MM-DD, IST) limits it to one day."""
+    out = db.auto_log_entries(day) + _manual_orders()
+    if day:
+        out = [e for e in out if _log_day(e) == day]
+    return sorted(out, key=lambda e: e.get("ts", 0))
 
 
 @app.get("/api/auto/log")
@@ -1660,12 +1623,12 @@ def auto_log_tail():
         datetime.datetime.strptime(day, "%Y-%m-%d")
     except ValueError:
         return bad("date must be YYYY-MM-DD")
-    return jsonify([e for e in reversed(_read_auto_log()) if _log_day(e) == day][:500])
+    return jsonify(list(reversed(_read_auto_log(day)))[:500])
 
 
 @app.get("/api/auto/log/dates")
 def auto_log_dates():
-    days = {_log_day(e) for e in _read_auto_log()}
+    days = db.auto_log_days() | {_log_day(e) for e in _manual_orders()}
     days.add(datetime.datetime.now(IST).strftime("%Y-%m-%d"))
     return jsonify(sorted(days, reverse=True))
 
