@@ -82,6 +82,47 @@
   button.saved { opacity: .7; }
   #brokerVerify.saved, #dtokVerify.saved { opacity: 1; background: #0b6; color: #fff; border-color: #0b6; } .refresh .ico.spin { animation: spin .3s linear; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- phones: single column, header on rows, tables as stacked cards ---- */
+  @media (max-width: 640px) {
+    body { font-size: 15px; }
+    main { margin: 10px auto; padding: 0 8px; gap: 12px; }
+    section { padding: 12px; }
+    header { flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
+    header > b { flex: 1 1 auto; white-space: nowrap; }
+    header .sp { display: none; }
+    .hmeta { display: flex; order: 3; flex: 1 1 100%; align-items: center; gap: 10px; min-width: 0; }
+    #bal { white-space: nowrap; font-size: 13px; }
+    #logDay { flex: 1; min-width: 0; }
+    #tokbox { order: 4; flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px; text-align: left; }
+    #tokbar { flex: 1; width: auto; }
+    #menuWrap { order: 2; } #sound, #theme { order: 1; }
+    input, select { width: 100%; min-width: 0; box-sizing: border-box; font-size: 16px; }  /* 16px stops iOS zooming into fields */
+    input[type=checkbox], .sw input { width: 100%; }
+    button { min-height: 36px; }
+    .ibtn, .round, .plus, .refresh { min-height: 0; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    .grid > label { align-content: start; }
+    .seg button { min-height: 36px; }
+    .actions button { min-width: 88px; }
+    #brokerSave, #brokerVerify, #dtokSave, #dtokVerify { height: 36px; }
+    /* tables: one card per row, each cell labelled with its column title */
+    table { display: block; }
+    tr:has(th) { display: none; }
+    tr { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; padding: 9px 0; border-bottom: 1px solid var(--bd); }
+    th, td { display: block; border: 0; padding: 0; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+    td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--mut); }
+    td[data-label=""]::before { display: none; }
+    td[data-label=""], td:only-child, td[data-label="Info"], td[data-label="Scan"], td[data-label="Symbols"] { grid-column: 1 / -1; }
+    td[data-label]:empty { display: none; }
+    td button:not(.ibtn) { padding: 6px 14px; }
+    .racts { justify-content: flex-start; }
+    .racts .ibtn { width: 36px; height: 36px; margin: 0 8px 0 0; }
+    #hookTable tr.sel { background: var(--in); }
+    .modal { padding: 8px; }
+    .modal .box { padding: 12px; }
+    #jsonModal > div, #addModal > div, #brokerModal > div, #perfModal > div { padding: 12px; width: 96vw; }
+  }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -95,7 +136,7 @@
 
 <div id="app" class="hidden">
 <header>
-  <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span id="bal"></span><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select><span class="sp"></span>
+  <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span class="hmeta"><span id="bal"></span><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select></span><span class="sp"></span>
   <span id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></span> 
   <button id="sound" title="Test alert sound" aria-label="Test alert sound"></button>
   <button id="theme" title="Toggle theme" aria-label="Toggle theme"></button>
@@ -291,9 +332,12 @@ for (const [b, src] of [["brokerVerify", "oauth"], ["dtokVerify", "token"]]) {  
 function markSaved(btn) { btn.textContent = "Saved"; btn.classList.add("saved"); }
 function msg(el, text, ok) { el.className = "msg " + (ok ? "ok" : "err"); el.textContent = text; }
 function showLogin() { $("app").classList.add("hidden"); $("login").classList.remove("hidden"); }
+let colLabels = [];  // titles of the table being built: its header row comes first, then its rows
 function row(cells, tag = "td") {
   const tr = document.createElement("tr");
-  for (const c of cells) { const e = document.createElement(tag); if (c instanceof Node) e.append(c); else e.textContent = c ?? ""; tr.append(e); }
+  if (tag === "th") colLabels = cells.map(String);
+  cells.forEach((c, i) => { const e = document.createElement(tag); if (c instanceof Node) e.append(c); else e.textContent = c ?? "";
+    if (tag === "td" && colLabels.length === cells.length) e.dataset.label = colLabels[i]; tr.append(e); });
   return tr;
 }
 
