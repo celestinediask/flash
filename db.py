@@ -30,6 +30,8 @@ SCHEMA = [
     # one row per scope ("hook:<id>" or "manual"): today's counters and armed TP/SL. A write is one atomic statement.
     "CREATE TABLE IF NOT EXISTS state (scope TEXT PRIMARY KEY, ts REAL NOT NULL, data TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    # failed-login counters ("ip:<addr>" and "*" for all addresses together); kept here so a restart doesn't unlock
+    "CREATE TABLE IF NOT EXISTS lockouts (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL, last REAL NOT NULL)",
 ]
 SCHEMA_VERSION = "1"
 
@@ -57,6 +59,83 @@ def conn():
         pass
     _local.conn, _local.path = c, path
     return c
+
+
+def reset():
+    """Erase every stored record (logs, postbacks, daily state); the schema stays."""
+    c = conn()
+    for t in ("audit", "auto_log", "postbacks", "state", "lockouts"):
+        c.execute(f"DELETE FROM {t}")
+    c.execute("VACUUM")  # DELETE only marks pages free; rewrite the file so old rows aren't left on disk
+    c.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # and empty the write-ahead log, which holds recent rows
+
+
+def export_all():
+    """Every stored record as plain lists (the `data` JSON parsed), for the account export."""
+    c = conn()
+    j = json.loads
+    return {
+        "audit": [[r[0], r[1], j(r[2])] for r in c.execute("SELECT ts, event, data FROM audit ORDER BY id")],
+        "auto_log": [[r[0], r[1], j(r[2])] for r in c.execute("SELECT ts, day, data FROM auto_log ORDER BY id")],
+        "postbacks": [[r[0], r[1], r[2], r[3], j(r[4])]
+                      for r in c.execute("SELECT ts, broker, order_id, status, data FROM postbacks ORDER BY id")],
+        "state": [[r[0], r[1], j(r[2])] for r in c.execute("SELECT scope, ts, data FROM state")],
+    }
+
+
+def check_export(t):
+    """Raise ValueError unless `t` has the shape export_all() produces."""
+    shapes = {"audit": (3, (int, float), str, dict), "auto_log": (3, (int, float), str, dict),
+              "postbacks": (5, (int, float), (str, type(None)), (str, type(None)), (str, type(None)), dict),
+              "state": (3, str, (int, float), dict)}
+    if not isinstance(t, dict) or set(t) != set(shapes):
+        raise ValueError("database section is malformed")
+    for name, rows in t.items():
+        n = shapes[name][0]
+        if not isinstance(rows, list):
+            raise ValueError(f"{name} must be a list")
+        for r in rows:
+            if not (isinstance(r, list) and len(r) == n):
+                raise ValueError(f"bad row in {name}")
+            for v, ty in zip(r, shapes[name][1:]):
+                if isinstance(v, bool) or not isinstance(v, ty):
+                    raise ValueError(f"bad value in {name}")
+
+
+def import_all(t):
+    """Replace every stored record with the exported ones, all or nothing."""
+    check_export(t)
+    c = conn()
+    dump = json.dumps
+    c.execute("BEGIN")
+    try:
+        for tbl in ("audit", "auto_log", "postbacks", "state"):
+            c.execute(f"DELETE FROM {tbl}")
+        c.executemany("INSERT INTO audit(ts, event, data) VALUES (?,?,?)", [(a, b, dump(x)) for a, b, x in t["audit"]])
+        c.executemany("INSERT INTO auto_log(ts, day, data) VALUES (?,?,?)", [(a, b, dump(x)) for a, b, x in t["auto_log"]])
+        c.executemany("INSERT INTO postbacks(ts, broker, order_id, status, data) VALUES (?,?,?,?,?)",
+                      [(a, b, o, s, dump(x)) for a, b, o, s, x in t["postbacks"]])
+        c.executemany("INSERT OR REPLACE INTO state(scope, ts, data) VALUES (?,?,?)",
+                      [(a, b, dump(x)) for a, b, x in t["state"]])
+        c.execute("COMMIT")
+    except Exception:
+        c.execute("ROLLBACK")
+        raise
+
+
+def lock_get(key):
+    """(count, locked_until, last_failure) for a login-lockout key; zeros if none."""
+    r = conn().execute("SELECT count, until, last FROM lockouts WHERE key=?", (key,)).fetchone()
+    return tuple(r) if r else (0, 0.0, 0.0)
+
+
+def lock_set(key, count, until, last):
+    conn().execute("INSERT OR REPLACE INTO lockouts(key, count, until, last) VALUES (?,?,?,?)", (key, count, until, last))
+
+
+def lock_clear(*keys):
+    for k in keys:
+        conn().execute("DELETE FROM lockouts WHERE key=?", (k,))
 
 
 def day_of(ts):

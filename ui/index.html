@@ -12,6 +12,13 @@
   body { font: 14px system-ui, sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
   header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--bd); background: var(--hd); color: var(--fg); padding: 10px 16px; display: flex; gap: 16px; align-items: center; }
   header .sp { flex: 1; }
+  #lockPage { max-width: 520px; margin: 80px auto; text-align: center; }
+  #lockPage h2 { font-size: 20px; } #lockPage.err h2, #lockPage.err #lockTime { color: #d33; } #lockPage.ok h2 { color: #0b6; }
+  #lockTime { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 12px 0; }
+  #toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: min(92vw, 420px); background: #d33; color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 16px #0006; }
+  #statDot { width: 8px; height: 8px; border-radius: 50%; background: #888; display: inline-block; }
+  #statusSec { display: grid; gap: 8px; } #statusSec h2 { margin: 0; }
+  .srow { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; } .srow > span { color: var(--mut); }
   #menuWrap { position: relative; } #menu { position: absolute; right: 0; top: 36px; z-index: 20; background: var(--card); border: 1px solid var(--bd); border-radius: 6px; padding: 4px; display: grid; gap: 4px; min-width: 150px; box-shadow: 0 4px 12px #0006; }
   #menu button { text-align: left; border: 0; }
   #menu button:hover, #menu button:focus-visible { background: var(--hov); }
@@ -39,7 +46,7 @@
   .msg.err { background: var(--errbg); display: block; } .msg.ok { background: var(--okbg); display: block; }
   #results { position: absolute; background: var(--card); border: 1px solid var(--bd); border-radius: 5px; z-index: 5; max-height: 240px; overflow: auto; }
   #results div { padding: 5px 8px; cursor: pointer; } #results div:hover { background: var(--hov); }
-  #login { max-width: 300px; margin: 80px auto; }
+  #login, #deleted { max-width: 300px; margin: 80px auto; }
   #modal { position: fixed; inset: 0; background: #0008; display: none; align-items: center; justify-content: center; }
   #jsonModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
   .perf { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--bd); position: relative; }
@@ -70,6 +77,7 @@
   .modal .box { background: var(--card); border: 1px solid var(--bd); border-radius: 8px; padding: 16px; width: 100%; max-width: 720px; margin: auto; }
   .ibtn { padding: 3px 5px; margin-left: 4px; line-height: 0; } .ibtn svg { display: block; } .ibtn.del:hover { color: #d33; }
   .racts { display: flex; justify-content: flex-end; white-space: nowrap; } tr.sel td { background: var(--in); }
+  .hbtns { display: inline-flex; align-items: center; gap: 6px; }
   h2.hd { display: flex; align-items: center; justify-content: space-between; }
   .sw { position: relative; display: inline-block; width: 38px; height: 22px; cursor: pointer; }
   .sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; z-index: 1; }
@@ -94,7 +102,6 @@
     .hmeta { display: flex; order: 3; flex: 1 1 100%; align-items: center; gap: 10px; min-width: 0; }
     #bal { white-space: nowrap; font-size: 13px; }
     #logDay { flex: 1; min-width: 0; }
-    #tokbox { order: 4; flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px; text-align: left; }
     #tokbar { flex: 1; width: auto; }
     #menuWrap { order: 2; } #sound, #theme { order: 1; }
     input, select { width: 100%; min-width: 0; box-sizing: border-box; font-size: 16px; }  /* 16px stops iOS zooming into fields */
@@ -127,22 +134,43 @@
 </style>
 </head>
 <body>
-<div id="login"><section>
-  <h2>Login</h2>
+<div id="deleted" class="hidden"><section>
+  <h2>Account deleted</h2>
+  <p>Your account was successfully deleted. All of its data has been erased from this server.</p>
+  <p><button class="primary" id="newAcct">Create a new account</button></p>
+</section></div>
+<div id="lockPage" class="hidden" role="alert"><section>
+  <h2 id="lockTitle"></h2>
+  <div id="lockTime"></div>
+  <p id="lockMsg"></p>
+  <p id="lockWarn" style="font-size:13px;color:var(--mut)">If this wasn't you, someone may be trying to break into your account: change your password after you log in.</p>
+  <p><button class="primary hidden" id="lockContinue">Continue to login</button></p>
+</section></div>
+<div id="login" class="hidden"><section>
+  <h2 id="loginTitle">Login</h2>
   <label>Password <input id="pw" type="password" autocomplete="current-password"></label>
+  <label id="pw2Box" class="hidden">Repeat password <input id="pw2" type="password" autocomplete="new-password"></label>
   <p><button class="primary" id="loginBtn">Log in</button></p>
   <div class="msg" id="loginMsg"></div>
 </section></div>
 
+<div id="toast" class="hidden" role="alert"></div>
 <div id="app" class="hidden">
 <header>
-  <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span class="hmeta"><span id="bal"></span><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select></span><span class="sp"></span>
-  <span id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></span> 
+  <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span class="hmeta"><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select></span><span class="sp"></span>
   <button id="sound" title="Test alert sound" aria-label="Test alert sound"></button>
   <button id="theme" title="Toggle theme" aria-label="Toggle theme"></button>
-<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="brokerLogin">Log in to broker</button><button id="logout" >Log out</button></div></div>
+<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="logout" >Log out</button><button id="accountBtn">Account</button></div></div>
 </header>
-<main>
+<main id="mainView">
+  <section id="statusSec">
+    <h2>Status <button id="rs" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+    <div class="srow"><span>Broker</span><b><i id="statDot"></i> <span id="statBroker">-</span></b></div>
+    <div class="srow"><span>Login</span><b id="statLogin">-</b></div>
+    <div id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></div>
+    <div class="srow"><span>Balance</span><b id="bal">-</b></div>
+    <div class="actions"><button id="brokerLogin">Log in to broker</button></div>
+  </section>
   <section>
     <h2>Webhook alerts <button id="ral" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
     <table id="alertsTbl"></table>
@@ -156,12 +184,12 @@
   <section><h2>Positions <button id="rp" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="positions"></table></section>
   <section><h2>Today's orders <button id="ro" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="orders"></table><div class="msg" id="ordersMsg"></div></section>
   <section>
-    <h2 class="hd">Webhook automation (Chartink) <button id="hookNew" class="plus" title="New webhook" aria-label="New webhook"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></h2>
+    <h2 class="hd">Webhook automation (Chartink) <span class="hbtns"><button id="hookDefaults" class="plus" title="Defaults for new webhooks" aria-label="Defaults for new webhooks"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--card)"/><circle cx="15" cy="12" r="2" fill="var(--card)"/><circle cx="8" cy="18" r="2" fill="var(--card)"/></svg></button> <button id="hookNew" class="plus" title="New webhook" aria-label="New webhook"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></span></h2>
     <table id="hookTable"></table>
     <div class="msg" id="hookMsg"></div>
     <div id="hookEdit" class="modal hidden"><div class="box" role="dialog" aria-modal="true" aria-labelledby="hookTitle">
     <h3 id="hookTitle" style="font-size:14px;margin:14px 0 6px"></h3>
-    <p style="font-size:12px;color:var(--mut)">Webhook URL (keep secret): <code id="hook"></code> <button class="copy" data-src="hook" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <p id="hookUrlRow" style="font-size:12px;color:var(--mut)">Webhook URL (keep secret): <code id="hook"></code> <button class="copy" data-src="hook" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
     <div class="grid">
       <label><span>Name<span class="req">*</span></span> <input id="a_name" autocomplete="off"></label>
       <label><span>Automation<span class="req">*</span></span> <select id="a_enabled"><option value="false">Off</option><option value="true">On</option></select></label>
@@ -200,6 +228,8 @@
     </div>
     <div class="actions"><button id="saveLimits">Save</button></div>
     <div class="msg" id="limMsg"></div>
+    <p style="font-size:12px;color:var(--mut)">Instrument list (used for symbol search and alerts): <span id="instInfo">...</span> <button id="instBtn">Download latest</button></p>
+    <div class="msg" id="instMsg"></div>
   </section>
 
   <section>
@@ -235,6 +265,32 @@
     <p style="font-size:12px;color:var(--mut)">Whitelist this IP in your broker's API settings.</p>
     <p><code id="serverIp">...</code> <button class="copy" data-src="serverIp" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
     <div class="msg" id="ipMsg"></div>
+  </section>
+</main>
+<main id="accountView" class="hidden">
+  <section>
+    <h2 class="hd">Account <button id="accBack">Back to dashboard</button></h2>
+  </section>
+  <section>
+    <h2>Change password</h2>
+    <div class="grid">
+      <label>Current password <input id="pwCur" type="password" autocomplete="current-password"></label>
+      <label>New password (min 8 characters) <input id="pwNew" type="password" autocomplete="new-password"></label>
+      <label>Repeat new password <input id="pwNew2" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="actions"><button id="pwSave">Change password</button></div>
+    <div class="msg" id="pwMsg"></div>
+  </section>
+  <section>
+    <h2>Your data</h2>
+    <p style="font-size:12px;color:var(--mut)">Export downloads everything stored for this account (brokers and their logins, webhooks, limits, logs and order history) as one file. It contains your broker logins and webhook URLs, so keep it private. Import replaces all current data with the contents of such a file; your password stays as it is.</p>
+    <div class="actions"><button id="expBtn">Export data</button> <button id="impBtn">Import data</button><input type="file" id="impFile" accept=".json,application/json" class="hidden"></div>
+    <div class="msg" id="dataMsg"></div>
+  </section>
+  <section>
+    <h2>Delete account</h2>
+    <p style="font-size:12px;color:var(--mut)">Erases all data on this server and the password. This cannot be undone. Export your data first if you may want it back.</p>
+    <div class="actions"><button id="delAccount">Delete account</button></div>
   </section>
 </main>
 </div>
@@ -308,7 +364,7 @@ async function api(path, body, broker = bm || activeBroker) {  // credential cal
   const r = await fetch("/api/" + path, body === undefined ? {} : {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   let j = {}; try { j = await r.json(); } catch (e) {}
-  if (r.status === 401 && path !== "login") showLogin();
+  if (r.status === 401 && path !== "login" && path !== "account/status") showLogin();
   return {ok: r.ok, status: r.status, data: j};
 }
 function done(btn, r, msgEl) {  // success: button turns green "Saved" until a value changes; failure: show error
@@ -326,12 +382,20 @@ for (const [b, src] of [["brokerVerify", "oauth"], ["dtokVerify", "token"]]) {  
   $(b).onclick = async () => {
     const m = $(src === "oauth" ? "brokerMsg" : "dtokMsg"); $(b).disabled = true; $(b).textContent = "Verifying...";
     const r = await api("auth/verify", {source: src}); $(b).disabled = false; $(b).textContent = "Verify";
-    if (r.ok) { m.className = "msg"; m.textContent = ""; $(b).textContent = "Verified"; $(b).classList.add("saved"); }
+    if (r.ok) { m.className = "msg"; m.textContent = ""; $(b).textContent = "Verified"; $(b).classList.add("saved"); api("brokers").then(x => x.ok && paintBmBadge(x.data.added.find(y => y.name === bm))); loadBrokers(); }
     else msg(m, r.data.error || "verification failed", false); };
 }
 function markSaved(btn) { btn.textContent = "Saved"; btn.classList.add("saved"); }
-function msg(el, text, ok) { el.className = "msg " + (ok ? "ok" : "err"); el.textContent = text; }
-function showLogin() { $("app").classList.add("hidden"); $("login").classList.remove("hidden"); }
+let toastTimer;
+function toast(text) { const t = $("toast"); t.textContent = text; t.classList.remove("hidden"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add("hidden"), 5000); }
+function msg(el, text, ok) {  // errors go to the top-right toast; only success/progress text stays inline
+  if (!ok) { el.className = "msg"; el.textContent = ""; toast(text); return; }
+  el.className = "msg ok"; el.textContent = text; }
+let hasAccount = true;
+async function showLogin() { $("app").classList.add("hidden");
+  const r = await api("account/status"); if (r.ok) hasAccount = r.data.exists;
+  $("loginTitle").textContent = hasAccount ? "Login" : "Create account"; $("loginBtn").textContent = hasAccount ? "Log in" : "Create account";
+  if (hasAccount && !lockedOut && !unlockShown) await checkLock(); $("login").classList.toggle("hidden", lockedOut || unlockShown); $("pw2Box").classList.toggle("hidden", hasAccount); $("pw").autocomplete = hasAccount ? "current-password" : "new-password"; $("loginMsg").textContent = ""; }
 let colLabels = [];  // titles of the table being built: its header row comes first, then its rows
 function row(cells, tag = "td") {
   const tr = document.createElement("tr");
@@ -341,10 +405,30 @@ function row(cells, tag = "td") {
   return tr;
 }
 
+let lockTimer, lockedOut = false, unlockShown = false, unlockAcked = false;
+function showLockPage(kind) { $("lockPage").className = kind; $("login").classList.add("hidden"); $("app").classList.add("hidden"); $("deleted").classList.add("hidden"); }
+function lockCountdown(secs) {  // full "locked out" page with a live countdown; switches to "unlocked" when it ends
+  clearInterval(lockTimer); lockedOut = true; unlockShown = false; const end = Date.now() + secs * 1000;
+  showLockPage("err"); $("lockTitle").textContent = "Account locked"; $("lockContinue").classList.add("hidden"); $("lockWarn").classList.remove("hidden");
+  $("lockMsg").textContent = "Your account is locked after too many failed login attempts. You can log in again when the timer ends.";
+  const paint = left => { $("lockTime").textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`; };
+  paint(secs);
+  lockTimer = setInterval(() => { const left = Math.ceil((end - Date.now()) / 1000);
+    if (left > 0) return paint(left);
+    clearInterval(lockTimer); lockedOut = false; showUnlocked(); }, 1000); }
+function showUnlocked() {  // stays until the user continues to the login box (it survives a refresh until they log in)
+  unlockShown = true; showLockPage("ok"); $("lockTitle").textContent = "Account unlocked"; $("lockTime").textContent = "";
+  $("lockMsg").textContent = "The lockout has ended and you can log in again. It was locked after too many failed login attempts.";
+  $("lockContinue").classList.remove("hidden"); }
+$("lockContinue").onclick = () => { unlockShown = false; unlockAcked = true; $("lockPage").className = "hidden"; $("loginBtn").disabled = false; $("login").classList.remove("hidden"); $("pw").focus(); };
+async function checkLock() { const r = await api("login/status"); if (!r.ok) return;
+  if (r.data.locked) lockCountdown(r.data.retry_after); else if (r.data.unlocked && !unlockAcked) showUnlocked(); }
 $("loginBtn").onclick = async () => {
-  const r = await api("login", {password: $("pw").value});
+  if (!hasAccount && $("pw").value !== $("pw2").value) return msg($("loginMsg"), "passwords do not match", false);
+  const r = await api(hasAccount ? "login" : "account/create", {password: $("pw").value});
+  if (r.status === 429 && r.data.retry_after) return lockCountdown(r.data.retry_after);
   if (!r.ok) return msg($("loginMsg"), r.data.error || "failed", false);
-  $("pw").value = ""; start();
+  $("pw").value = $("pw2").value = ""; start();
 };
 $("dtokSave").onclick = async () => {
   const r = await api("auth/token", {token: $("dtok").value.trim(), app_name: $("dtokName").value});
@@ -362,6 +446,37 @@ themeIcon();
 $("menuBtn").onclick = e => { e.stopPropagation(); $("menu").classList.toggle("hidden"); };
 document.addEventListener("click", e => { if (!$("menuWrap").contains(e.target)) $("menu").classList.add("hidden"); });
 $("theme").onclick = () => { const l = document.documentElement.classList.toggle("light"); localStorage.theme = l ? "light" : "dark"; themeIcon(); };
+function showAccount(on) { $("accountView").classList.toggle("hidden", !on); $("mainView").classList.toggle("hidden", on); window.scrollTo(0, 0); }
+$("accountBtn").onclick = () => { $("menu").classList.add("hidden"); showAccount(true); };
+$("accBack").onclick = () => showAccount(false);
+$("pwSave").onclick = async () => {
+  if ($("pwNew").value !== $("pwNew2").value) return toast("New passwords do not match");
+  const r = await api("account/password", {current: $("pwCur").value, new: $("pwNew").value});
+  if (!r.ok) return toast(r.data.error || "failed");
+  $("pwCur").value = $("pwNew").value = $("pwNew2").value = ""; msg($("pwMsg"), "Password changed.", true); };
+$("expBtn").onclick = async () => {
+  const pw = prompt("Type your password to export your data:"); if (!pw) return;
+  const r = await api("account/export", {password: pw}); if (!r.ok) return toast(r.data.error || "failed");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(r.data)], {type: "application/json"}));
+  a.download = "flash-export-" + new Date().toISOString().slice(0, 10) + ".json"; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000); msg($("dataMsg"), "Exported. Keep the file private: it contains your broker logins.", true); };
+$("impBtn").onclick = () => $("impFile").click();
+$("impFile").onchange = async () => {
+  const f = $("impFile").files[0]; $("impFile").value = ""; if (!f) return;
+  let bundle; try { bundle = JSON.parse(await f.text()); } catch (e) { return toast("That file is not valid JSON"); }
+  if (!confirm("Import this file?\n\nAll current data (brokers, webhooks, limits, logs, order history) will be REPLACED by the file's contents.")) return;
+  const pw = prompt("Type your password to confirm:"); if (!pw) return;
+  const r = await api("account/import", {password: pw, bundle}); if (!r.ok) return toast(r.data.error || "failed");
+  location.reload(); };
+$("delAccount").onclick = async () => {
+  if (!confirm("Delete account?\n\nThis erases ALL data on this server: brokers and their logins, webhooks, limits, logs and order history. It cannot be undone.")) return;
+  const PHRASE = "I want to DELETE MY ACCOUNT";
+  if (prompt(`To confirm, type exactly:\n${PHRASE}`) !== PHRASE) return toast("Text did not match. Nothing was deleted.");
+  const pw = prompt("Type your password to confirm:"); if (!pw) return;
+  const r = await api("account/delete", {password: pw, confirm: PHRASE});
+  if (!r.ok) return toast(r.data.error || "failed");
+  $("app").classList.add("hidden"); $("login").classList.add("hidden"); $("menu").classList.add("hidden"); $("deleted").classList.remove("hidden"); showAccount(false); };
+$("newAcct").onclick = () => { $("deleted").classList.add("hidden"); showLogin(); };
 $("logout").onclick = async () => { if (!confirm("Log out?")) return; await api("logout", {}); showLogin(); };
 
 function seg(id, cb) {
@@ -419,7 +534,8 @@ $("review").onclick = async () => {
 $("cancelModal").onclick = () => $("modal").style.display = "none";
 
 async function refresh() { loadFunds(); loadPositions(); loadOrders(); }
-async function loadFunds() { const r = await api("funds"); if (r.ok) $("bal").textContent = "Balance ₹" + r.data.available; }
+async function loadFunds() { if (!hasBrokers) { $("bal").textContent = "-"; return; }
+  const r = await api("funds"); $("bal").textContent = r.ok ? "₹" + r.data.available : "unavailable"; }
 async function loadLimits() { const r = await api("limits"); if (!r.ok) return;
   $("maxCap").value = r.data.max_capital; $("enabled").value = String(r.data.trading_enabled);
   markSaved($("saveLimits")); }
@@ -444,6 +560,7 @@ async function loadOrders() { const r = await api("orders"); const t = $("orders
     b.onclick = async () => { const c = await api("cancel", {order_id: o.order_id}); msg($("ordersMsg"), JSON.stringify(c.data), c.ok); loadOrders(); };
     t.append(row([(o.time || "").slice(11), o.symbol, o.side, o.order_type, o.qty, o.price, o.status + (o.message ? " - " + o.message : ""), open ? b : ""])); } }
 $("rp").onclick = loadPositions; $("ro").onclick = loadOrders;
+$("rs").onclick = () => { loadBrokerTok(); loadFunds(); };
 
 
 const AUTO_NUM = ["stocks_per_alert","max_positions","max_daily_trades","capital_per_stock","max_daily_capital","max_qty","exit_timeout","limit_buffer","tp_pct","sl_pct","max_daily_loss","cooldown_minutes"];
@@ -495,6 +612,7 @@ function drawPerf(card, pts) {  // cumulative realised P&L by day, zero baseline
   svg.onpointermove = show; svg.onpointerdown = show; svg.onpointerleave = () => { dot.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
   card.append(svg, tip); }
 function renderHooks() { const t = $("hookTable"); t.textContent = "";
+  if (!hooks.length) { t.textContent = "No webhooks yet. Use + to add one."; return; }
   t.append(row(["Name", "Status", "Mode", "Side", "Trades", "Value (₹)", ""], "th"));
   for (const h of hooks) {
     const u = document.createElement("span"); u.hidden = true; u.id = "hu_" + h.id; u.textContent = h.url;
@@ -503,31 +621,53 @@ function renderHooks() { const t = $("hookTable"); t.textContent = "";
     acts.append(u, cp, iconBtn(CHART_SVG, "Performance", "", () => openPerf(h)), iconBtn(PENCIL_SVG, "Edit", "", () => editHook(h.id)), iconBtn(TRASH_SVG, "Delete", "del", () => delHook(h.id)));
     const tr = row([h.name, h.rules.enabled ? "On" : "Off", h.rules.mode === "live" ? "LIVE" : "DEMO", h.rules.side, String(h.today.trades), String(h.today.capital), acts]);
     if (h.id === hookId) tr.classList.add("sel"); t.append(tr); } }
-function editHook(id) { hookId = id; const h = hooks.find(x => x.id === id); if (!h) return;
+async function loadInstruments() { const r = await api("instruments"); if (!r.ok) return; const d = r.data;
+  $("instInfo").textContent = d.count ? `${d.count} instruments, downloaded ${new Date(d.updated * 1000).toLocaleString()}` : "not downloaded yet";
+  $("instBtn").textContent = d.count ? "Download latest" : "Download"; $("instBtn").disabled = !d.can_download;
+  $("instBtn").title = d.can_download ? "" : "Add a broker first"; }
+$("instBtn").onclick = async () => {
+  if (!confirm("Download the instrument list from the broker now? (about 25 MB)")) return;
+  $("instBtn").disabled = true; msg($("instMsg"), "Downloading...", true);
+  const r = await api("instruments/refresh", {});
+  if (r.ok) $("instMsg").textContent = ""; else msg($("instMsg"), r.data.error || "failed", false);
+  loadInstruments(); };
+function setDefaultsMode(on) { for (const id of ["hookUrlRow"]) $(id).classList.toggle("hidden", on);
+  for (const id of ["a_name", "a_enabled"]) $(id).closest("label").classList.toggle("hidden", on); }
+$("hookDefaults").onclick = async () => { const r = await api("webhooks/defaults"); if (!r.ok) return;
+  hookId = "__defaults__"; setDefaultsMode(true); $("hookTitle").textContent = "Defaults for new webhooks";
+  for (const k of AUTO_NUM.concat(AUTO_TXT)) $("a_" + k).value = (k === "max_qty" || k === "exit_timeout") && !r.data[k] ? "" : r.data[k];
+  syncMethod(); $("a_today").textContent = "-"; markSaved($("saveAuto")); $("autoMsg").textContent = ""; $("hookEdit").classList.remove("hidden"); };
+function editHook(id) { hookId = id; setDefaultsMode(false); const h = hooks.find(x => x.id === id); if (!h) return;
   $("hookTitle").textContent = "Edit: " + h.name; $("hook").textContent = h.url; $("a_name").value = h.name; $("a_enabled").value = String(h.rules.enabled);
   for (const k of AUTO_NUM.concat(AUTO_TXT)) $("a_" + k).value = (k === "max_qty" || k === "exit_timeout") && !h.rules[k] ? "" : h.rules[k];
   syncMethod();
   $("a_today").textContent = `${h.today.trades} trades, ₹${h.today.capital} used`; markSaved($("saveAuto")); $("autoMsg").textContent = "";
   $("hookEdit").classList.remove("hidden"); renderHooks(); }
-function closeHook() { hookId = null; $("hookEdit").classList.add("hidden"); renderHooks(); }
+function closeHook() { hookId = null; setDefaultsMode(false); $("hookEdit").classList.add("hidden"); renderHooks(); }
 async function loadAuto() { const r = await api("webhooks"); if (!r.ok) return;
   hooks = r.data; if (hookId && !hooks.some(x => x.id === hookId)) hookId = null;
   if (hookId) editHook(hookId); else closeHook(); }
 $("hookClose").onclick = closeHook;
 $("hookEdit").onmousedown = e => { if (e.target === $("hookEdit")) closeHook(); };
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("hookEdit").classList.contains("hidden")) closeHook(); });
-$("hookNew").onclick = async () => {
-  const name = (prompt("Name for the new webhook:") || "").trim(); if (!name) return;
-  const r = await api("webhooks", {name}); if (!r.ok) return msg($("hookMsg"), r.data.error || "failed", false);
-  hookId = r.data.id; loadAuto(); };
+$("hookNew").onclick = async () => {  // open the edit window straight away; the webhook is created on Save
+  const r = await api("webhooks/defaults"); if (!r.ok) return;
+  hookId = "__new__"; setDefaultsMode(false); $("hookUrlRow").classList.add("hidden");
+  $("hookTitle").textContent = "New webhook"; $("a_name").value = ""; $("a_enabled").value = "false";
+  for (const k of AUTO_NUM.concat(AUTO_TXT)) $("a_" + k).value = (k === "max_qty" || k === "exit_timeout") && !r.data[k] ? "" : r.data[k];
+  syncMethod(); $("a_today").textContent = "-"; $("saveAuto").classList.remove("saved"); $("saveAuto").textContent = "Save"; $("autoMsg").textContent = "";
+  $("hookEdit").classList.remove("hidden"); renderHooks(); $("a_name").focus(); };
 async function delHook(id) {
   const h = hooks.find(x => x.id === id); if (!h || !confirm(`Delete webhook "${h.name}"? Its URL stops working.`)) return;
   const r = await api("webhooks/" + id + "/delete", {}); if (!r.ok) return msg($("hookMsg"), r.data.error || "failed", false);
   if (hookId === id) hookId = null; loadAuto(); }
 $("saveAuto").onclick = async () => {
-  const b = {name: $("a_name").value, enabled: $("a_enabled").value === "true"};
+  const defs = hookId === "__defaults__", b = defs ? {} : {name: $("a_name").value, enabled: $("a_enabled").value === "true"};
   for (const k of AUTO_NUM.concat(AUTO_TXT)) b[k] = $("a_" + k).value;
-  const r = await api("webhooks/" + hookId, b); done($("saveAuto"), r, $("autoMsg")); if (r.ok) loadAuto(); };
+  const isNew = hookId === "__new__";
+  const r = await api(isNew ? "webhooks" : "webhooks/" + (defs ? "defaults" : hookId), b); done($("saveAuto"), r, $("autoMsg"));
+  if (r.ok && isNew) hookId = r.data.id;
+  if (r.ok && !defs) loadAuto(); };
 const COPY_SVG = document.querySelector(".copy").innerHTML, TICK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 document.addEventListener("click", async e => {
   const b = e.target.closest(".copy"); if (!b) return;
@@ -585,8 +725,9 @@ $("brokerSave").onclick = async () => {
 async function loadDtok() { const r = await api("auth/token"); if (r.ok) { $("dtokName").value = r.data.app_name; if (r.data.app_name && r.data.has_token) markSaved($("dtokSave")); } }
 
 function applyMode(m) { $("tgBroker").checked = m.oauth; $("tgDat").checked = m.token;
-  $("brokerLogin2").disabled = !m.oauth;  // editing/saving the key is allowed even when the toggle is off
-  if (bm === activeBroker) $("brokerLogin").disabled = !m.oauth; }
+  $("brokerLogin2").disabled = !m.oauth && !loginFirst;  // editing/saving the key is allowed even when the toggle is off
+  if (bm === activeBroker) $("brokerLogin").disabled = !m.oauth && !loginFirst; }
+let loginFirst = false;  // broker whose API key can only be proven by logging in: Log in works before the toggle is on
 let tokExp = 0, tokIss = 0;
 function paintTok() {
   const left = tokExp - Date.now() / 1000, total = Math.max(1, tokExp - tokIss), f = $("tokfill");
@@ -596,38 +737,49 @@ function paintTok() {
   $("toktxt").textContent = h + "h " + m + "m left"; }
 setInterval(paintTok, 30000);
 async function loadBrokerTok() { const r = await api("auth/status", undefined, activeBroker); if (!r.ok) return false;
-  tokExp = r.data.valid ? r.data.expiry : 0; tokIss = r.data.issued || (tokExp - 86400); paintTok(); return r.data.valid; }
+  tokExp = r.data.valid ? r.data.expiry : 0; tokIss = r.data.issued || (tokExp - 86400); tokValid = !!r.data.valid; paintTok(); paintHeaderBroker(); return r.data.valid; }
 async function startLogin(name, msgEl) {
   const r = await api("auth/login", {}, name);
   if (!r.ok) return msg(msgEl, r.data.error || "failed", false);
   window.open(r.data.url, "_blank", "noopener"); msg(msgEl, "Log in on the broker tab, then come back here.", true);
   const t = setInterval(async () => {
     const s = await api("auth/status", undefined, name);
-    if (s.ok && s.data.valid) { clearInterval(t); msgEl.textContent = ""; if (name === activeBroker) { loadBrokerTok(); refresh(); } } }, 3000);
+    if (s.ok && s.data.valid) { clearInterval(t); msgEl.textContent = ""; if (name === activeBroker) { loadBrokerTok(); refresh(); }
+      if (bm === name) { loadVerified(); api("brokers").then(x => x.ok && paintBmBadge(x.data.added.find(y => y.name === name))); } loadBrokers(); } }, 3000);
   setTimeout(() => clearInterval(t), 600000); }
 $("brokerLogin").onclick = () => startLogin(activeBroker, $("brokerListMsg"));
 $("brokerLogin2").onclick = () => startLogin(bm, $("brokerMsg"));
 async function loadAuthInfo() {  // labels and which credential sections apply to the broker in the details window
   const r = await api("auth"); if (!r.ok) return; const d = r.data, has = k => d.kinds.includes(k);
-  $("bmTitle").textContent = d.display_name;
+  loginFirst = !!d.login_first; $("bmTitle").textContent = d.display_name;
   $("oauthTitle").textContent = d.oauth_label; $("tokenTitle").textContent = d.token_label;
   $("oauthHelp").textContent = d.oauth_help;
   $("redirectUrl").textContent = d.redirect_url; $("postbackUrl").textContent = d.postback_url; $("postbackUrl2").textContent = d.postback_url;
   $("tgBroker").closest("section").classList.toggle("hidden", !has("oauth"));
-  $("tgDat").closest("section").classList.toggle("hidden", !has("token")); }
+  $("tgDat").closest("section").classList.toggle("hidden", !has("token")); loadMode(); }
+let hasBrokers = false;
+let tokValid = false;
+function paintHeaderBroker() {  // login button and token bar only make sense once a broker has been added
+  $("brokerLogin").classList.toggle("hidden", !hasBrokers); if (!hasBrokers) $("tokbox").classList.add("hidden");
+  $("statBroker").textContent = hasBrokers ? (statName || activeBroker) : "none added";
+  $("statLogin").textContent = !hasBrokers ? "-" : tokValid ? "Logged in" : "Not logged in";
+  $("statDot").style.background = !hasBrokers ? "#888" : tokValid ? "#0b6" : "#d33"; }
+let statName = "";
 async function loadActiveInfo() {  // header labels for the active broker
+  paintHeaderBroker(); if (!hasBrokers) return;
   const r = await api("auth", undefined, activeBroker); if (!r.ok) return;
-  $("brokerLogin").textContent = "Log in to " + r.data.display_name; $("tokbox").title = r.data.display_name + " login token expiry";
+  statName = r.data.display_name; paintHeaderBroker(); $("brokerLogin").textContent = "Log in to " + r.data.display_name; $("tokbox").title = r.data.display_name + " login token expiry";
   $("tokbox").classList.toggle("hidden", !r.data.kinds.includes("oauth"));
-  const m = await api("auth/mode", undefined, activeBroker); if (m.ok) $("brokerLogin").disabled = !m.data.oauth; }
+  const m = await api("auth/mode", undefined, activeBroker); if (m.ok) $("brokerLogin").disabled = !m.data.oauth && !r.data.login_first; }
 async function loadBrokers() {
   const r = await api("brokers"); if (!r.ok) return; activeBroker = r.data.active;
+  const had = hasBrokers; hasBrokers = r.data.added.length > 0; paintHeaderBroker(); if (hasBrokers !== had) { loadActiveInfo(); loadFunds(); }
   const box = $("brokerList"); box.textContent = ""; $("brokerList").dataset.addable = JSON.stringify(r.data.addable);
   if (!r.data.added.length) box.textContent = "No brokers added yet.";
   for (const b of r.data.added) {
     const x = document.createElement("div"); x.className = "brow";
     const n = document.createElement("b"); n.textContent = b.label;
-    const st = document.createElement("span"); st.className = "badge" + (b.active ? " on" : ""); st.textContent = b.active ? "Active" : b.configured ? "Ready" : "Needs setup";
+    const st = document.createElement("span"); const live = b.active && b.verified; st.className = "badge" + (live ? " on" : ""); st.textContent = live ? "Active" : !b.verified ? "Not verified" : "Ready";
     const sp = document.createElement("span"); sp.className = "sp2";
     const ed = document.createElement("button"); ed.className = "ibtn"; ed.title = "Edit " + b.label; ed.setAttribute("aria-label", ed.title); ed.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`; ed.onclick = () => openBroker(b.name);
     const del = document.createElement("button"); del.className = "ibtn"; del.title = "Delete " + b.label; del.setAttribute("aria-label", del.title); del.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>`;
@@ -635,7 +787,6 @@ async function loadBrokers() {
     x.append(n, st, sp, ed, del); box.append(x); }
   $("addBrokerBtn").disabled = !r.data.addable.length; }
 async function deleteBroker(b) {
-  if (b.active) return msg($("brokerListMsg"), "This is the active broker. Make another broker active first.", false);
   if (!confirm("Delete " + b.label + "? Its saved login and settings will be erased from this server.")) return;
   const r = await api("brokers/remove", {name: b.name});
   if (r.ok) { $("brokerListMsg").textContent = ""; loadBrokers(); } else msg($("brokerListMsg"), r.data.error || "failed", false); }
@@ -654,16 +805,19 @@ $("cfgFields").addEventListener("input", () => { $("cfgSave").classList.remove("
 const VERIFY = [["brokerVerify", "oauth"], ["dtokVerify", "token"]];
 async function loadVerified() { const r = await api("auth/verified");
   for (const [b, src] of VERIFY) { const on = r.ok && r.data[src]; $(b).textContent = on ? "Verified" : "Verify"; $(b).classList.toggle("saved", on); } }
+function paintBmBadge(me) { $("bmBar").classList.toggle("hidden", !me || me.active); const live = !!(me && me.active && me.verified);
+  $("bmActive").textContent = live ? "Active" : me && me.active ? "Not verified" : ""; $("bmActive").className = "badge" + (live ? " on" : ""); }
 async function openBroker(name) {
   bm = name; for (const id of ["cfgSave", "brokerSave", "dtokSave"]) { $(id).classList.remove("saved"); $(id).textContent = "Save"; }
   for (const id of ["bmMsg", "cfgMsg", "brokerMsg", "dtokMsg"]) { $(id).textContent = ""; $(id).className = "msg"; }
   $("b_secret").value = ""; $("dtok").value = "";
   const info = (await api("brokers")).data, me = info.added.find(b => b.name === name);
-  $("bmActive").textContent = me && me.active ? "Active" : ""; $("bmActive").className = "badge" + (me && me.active ? " on" : "");
-  $("bmBar").classList.toggle("hidden", !!(me && me.active));
+  paintBmBadge(me);
   $("brokerModal").classList.remove("hidden");
   await Promise.all([loadAuthInfo(), loadConfig(), loadBroker(), loadDtok(), loadMode(), loadVerified()]); }
-function closeBroker() { $("brokerModal").classList.add("hidden"); bm = ""; loadBrokers(); loadActiveInfo(); loadBrokerTok(); }
+async function dropIfUnlisted(name) {  // closed without verifying: it was never added, so erase what was typed in
+  const x = await api("brokers"); if (x.ok && !x.data.added.some(b => b.name === name)) { await api("brokers/remove", {name}); loadBrokers(); } }
+function closeBroker() { const name = bm; $("brokerModal").classList.add("hidden"); bm = ""; if (name) dropIfUnlisted(name); loadBrokers(); loadActiveInfo(); loadBrokerTok(); }
 $("bmClose").onclick = closeBroker;
 $("brokerModal").onclick = e => { if (e.target === $("brokerModal")) closeBroker(); };
 $("bmUse").onclick = async () => {
@@ -674,7 +828,7 @@ $("addBrokerBtn").onclick = () => {
   const box = $("addList"); box.textContent = "";
   for (const b of JSON.parse($("brokerList").dataset.addable || "[]")) {
     const x = document.createElement("button"); x.className = "brow"; x.textContent = b.label;
-    x.onclick = async () => { await api("brokers/add", {name: b.name}); $("addModal").classList.add("hidden"); await loadBrokers(); openBroker(b.name); };
+    x.onclick = () => { $("addModal").classList.add("hidden"); openBroker(b.name); };  // listed only after it verifies
     box.append(x); }
   $("addModal").classList.remove("hidden"); };
 $("addClose").onclick = () => $("addModal").classList.add("hidden");
@@ -685,7 +839,7 @@ for (const [id, src, msgId] of [["tgBroker", "oauth", "brokerMsg"], ["tgDat", "t
   $(id).onchange = async () => {
     const r = await api("auth/mode", {source: src, enabled: $(id).checked});
     if (r.ok) { applyMode(r.data); $(msgId).className = "msg"; $(msgId).textContent = ""; }
-    else { msg($(msgId), r.data.error || "failed", false); loadMode(); } };
+    else { $(msgId).className = "msg"; $(msgId).textContent = ""; toast(r.data.error || "failed"); loadMode(); } };
 }
 async function loadIp(fresh) { const r = await api("server-ip" + (fresh ? "?fresh=1" : ""));
   if (r.ok) { $("serverIp").textContent = r.data.ip; $("ipMsg").className = "msg"; } else msg($("ipMsg"), r.data.error, false); }
@@ -726,7 +880,7 @@ setInterval(() => { if (!$("app").classList.contains("hidden")) pollAlert(); }, 
 
 async function start() {
   const r = await api("limits"); if (!r.ok) return showLogin();
-  $("login").classList.add("hidden"); $("app").classList.remove("hidden"); loadLimits(); loadAuto(); loadBrokers().then(() => { loadActiveInfo(); loadBrokerTok(); }); loadIp(); loadLogDays().then(loadAutoLog); refresh(); pollAlert();
+  $("login").classList.add("hidden"); $("lockPage").className = "hidden"; unlockAcked = false; $("app").classList.remove("hidden"); loadLimits(); loadInstruments(); loadAuto(); loadBrokers().then(() => { loadActiveInfo(); loadBrokerTok(); }); loadIp(); loadLogDays().then(loadAutoLog); refresh(); pollAlert();
 }
 start();
 </script>

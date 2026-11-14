@@ -17,26 +17,36 @@ from dotenv import load_dotenv
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(HERE, ".env"))
-if not os.environ.get("POSTBACK_SECRET"):
-    sys.exit("POSTBACK_SECRET not set. Add it to .env (see .env.example).")
 
 import db  # noqa: E402
 from brokers import REGISTRY, BrokerError, load_saved_config  # noqa: E402
 
-SECRET = os.environ["POSTBACK_SECRET"]
-HANDLERS = {n: c(config=load_saved_config(HERE, n)) for n, c in REGISTRY.items()
-            if c.supports_postback and c.is_configured(load_saved_config(HERE, n))}
-if not HANDLERS:
-    sys.exit("No broker with postback support is configured.")
+from dotenv import dotenv_values  # noqa: E402
+
+
+def current_secret():
+    """Read from .env on every request, so rotating it (account deletion) takes effect without a restart."""
+    return dotenv_values(os.path.join(HERE, ".env")).get("POSTBACK_SECRET") or ""
+
+
+def current_handlers():
+    """Brokers configured right now (re-read per request: brokers are added and removed in the UI)."""
+    out = {}
+    for n, c in REGISTRY.items():
+        cfg = load_saved_config(HERE, n)
+        if c.supports_postback and c.is_configured(cfg):
+            out[n] = c(config=cfg)
+    return out
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        HANDLERS, SECRET = current_handlers(), current_secret()
         parts = self.path.strip("/").split("/")
         if len(parts) == 2 and parts[0] == "postback" and "dhan" in HANDLERS:
             parts.insert(1, "dhan")  # URL registered before multi-broker support: /postback/<secret>
         # the secret in the path is the first line of authentication; the adapter then checks the account
-        ok = len(parts) == 3 and parts[0] == "postback" and hmac.compare_digest(parts[2], SECRET)
+        ok = len(parts) == 3 and parts[0] == "postback" and bool(SECRET) and hmac.compare_digest(parts[2], SECRET)
         broker = HANDLERS.get(parts[1]) if ok else None
         if not broker:
             return self._reply(404)
@@ -67,5 +77,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(os.environ.get("POSTBACK_PORT", 8080))
     host = os.environ.get("POSTBACK_HOST", "127.0.0.1")  # behind a reverse proxy; set 0.0.0.0 to expose directly
-    print(f"Listening on {host}:{port} for: {', '.join(HANDLERS)}")
+    print(f"Listening on {host}:{port}", flush=True)
     HTTPServer((host, port), Handler).serve_forever()

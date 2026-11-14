@@ -6,6 +6,8 @@ __pycache__/
 *.swp
 limits.json
 scrip-master.csv
+kite-instruments.csv
+account.json
 creds/
 active_broker.json
 webhooks.json

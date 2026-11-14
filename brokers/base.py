@@ -53,6 +53,8 @@ class Broker(ABC):
     token_label = "Access token"
     oauth_label = "API key"
     oauth_help = ""      # shown above the API key form (e.g. which URLs to register)
+    verify_requires_login = False  # True: the API key/secret can only be proven by a completed browser login
+    instrument_file = "instruments.csv"  # saved copy of this broker's instrument master, in the app folder
 
     def env_token(self):
         """Token supplied through the environment, if the broker has one."""
@@ -105,8 +107,9 @@ class Broker(ABC):
     def trades_today(self): ...
 
     @abstractmethod
-    def load_instruments(self, cache_dir):
-        """Return a list of instrument dicts (see module docstring)."""
+    def load_instruments(self, cache_dir, refresh=False):
+        """Return a list of instrument dicts (see module docstring). Download a fresh master only when
+        `refresh` is true; otherwise use the saved copy, or return [] if none exists."""
 
     # Optional: bracket/super orders.
     supports_super_orders = False

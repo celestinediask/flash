@@ -72,6 +72,7 @@ class DhanBroker(Broker):
     oauth_help = "Give the redirect URL (and the postback URL) to Dhan when you generate the API key."
     supports_super_orders = True
     supports_postback = True
+    instrument_file = "scrip-master.csv"
 
     def __init__(self, config=None, token_provider=None):
         super().__init__(config, token_provider)
@@ -167,19 +168,18 @@ class DhanBroker(Broker):
     def cancel_super_leg(self, order_id, leg):
         return self._result(*self.request("DELETE", f"/super/orders/{order_id}/{leg}"))
 
-    def load_instruments(self, cache_dir):
-        """NSE/BSE equity (series EQ) rows from Dhan's instrument master, refreshed daily."""
-        path = os.path.join(cache_dir, "scrip-master.csv")
-        if not os.path.exists(path) or time.time() - os.path.getmtime(path) > 86400:
-            try:
-                r = requests.get(SCRIP_URL, timeout=60)
-                r.raise_for_status()
-                with open(path, "wb") as f:
-                    f.write(r.content)
-            except requests.RequestException as e:
-                if not os.path.exists(path):
-                    raise
-                print("scrip master refresh failed, using stale copy:", e, flush=True)
+    def load_instruments(self, cache_dir, refresh=False):
+        """NSE/BSE equity (series EQ) rows from Dhan's instrument master. Downloads only when `refresh` is set
+        (the user asked for it in the UI); otherwise reads the saved copy, or returns [] if there is none."""
+        path = os.path.join(cache_dir, self.instrument_file)
+        if refresh:
+            r = requests.get(SCRIP_URL, timeout=60)
+            r.raise_for_status()
+            with open(path + ".tmp", "wb") as f:
+                f.write(r.content)
+            os.replace(path + ".tmp", path)
+        if not os.path.exists(path):
+            return []
         rows = []
         with open(path, newline="") as f:
             for r in csv.DictReader(f):

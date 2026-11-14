@@ -8,8 +8,9 @@ import os
 
 from .base import Broker, BrokerError, OPEN_STATUSES  # noqa: F401
 from .dhan import DhanBroker
+from .kite import KiteBroker
 
-REGISTRY = {DhanBroker.name: DhanBroker}
+REGISTRY = {DhanBroker.name: DhanBroker, KiteBroker.name: KiteBroker}
 
 
 def load_saved_config(root, name):

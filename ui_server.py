@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Web UI to place equity orders through a pluggable broker adapter (see brokers/) (regular or Super Order with TP/SL).
 
-Env (via .env): UI_PASSWORD_HASH, UI_SECRET_KEY, ALERT_SECRET
+Env (via .env, all optional; the secrets are generated on first start): UI_SECRET_KEY, POSTBACK_SECRET
 Optional: APP_NAME (title shown in the UI), BROKER (first-run default, else dhan), UI_PORT (8081), UI_HOST (127.0.0.1)
 Run behind a TLS reverse proxy only; session cookies are Secure.
 """
@@ -9,6 +9,7 @@ import csv
 import datetime
 import hashlib
 import hmac
+import re
 import secrets
 import json
 import math
@@ -23,16 +24,13 @@ import zoneinfo
 import requests
 from dotenv import load_dotenv
 from flask import Flask, g, has_request_context, jsonify, request, send_from_directory, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
 from brokers import OPEN_STATUSES, REGISTRY, BrokerError, available, get_broker, load_saved_config
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(HERE, ".env"))
-for _k in ("UI_PASSWORD_HASH", "UI_SECRET_KEY", "ALERT_SECRET"):
-    if not os.environ.get(_k):
-        sys.exit(f"{_k} not set. Add it to .env (see .env.example).")
 
 LIMITS_FILE = os.path.join(HERE, "limits.json")
 ACTIVE_FILE = os.path.join(HERE, "active_broker.json")  # broker chosen in the UI
@@ -43,7 +41,7 @@ DEFAULT_LIMITS = {"max_capital": 100.0, "trading_enabled": False}
 
 app = Flask(__name__, static_folder=None)
 app.config.update(
-    SECRET_KEY=os.environ["UI_SECRET_KEY"],
+    SECRET_KEY=os.environ.get("UI_SECRET_KEY") or "unset",  # replaced by _init_secrets() below
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",
@@ -52,7 +50,6 @@ app.config.update(
 )
 
 _lock = threading.Lock()  # guards limits file, audit log, order placement, login counters
-_fails = {}  # ip -> (count, locked_until)
 
 
 # ---------- helpers ----------
@@ -111,10 +108,12 @@ _scrips = []
 _nse = {}  # trading symbol -> scrip, NSE equity only (alerts are matched on NSE)
 
 
-def load_scrips():
-    """Equity instruments from the broker's instrument master."""
+
+
+def load_scrips(refresh=False):
+    """Equity instruments from the broker's instrument master (downloaded only when refresh=True)."""
     global _scrips
-    rows = broker.load_instruments(HERE)
+    rows = broker.load_instruments(HERE, refresh=refresh)
     _scrips = rows
     _nse.clear()
     _nse.update({r['symbol']: r for r in rows if r['exchange'] == 'NSE_EQ'})
@@ -150,7 +149,7 @@ def bad(msg, code=400):
 
 @app.before_request
 def guard():
-    if request.path.startswith("/api/") and request.path != "/api/login":
+    if request.path.startswith("/api/") and request.path not in ("/api/login", "/api/login/status", "/api/account/status", "/api/account/create"):
         if not session.get("auth"):
             return bad("not logged in", 401)
     p = request.path
@@ -174,26 +173,90 @@ def headers(resp):
 
 
 # ---------- auth ----------
+ACCOUNT_FILE = os.path.join(HERE, "account.json")  # the UI password hash; null/absent = no account yet
+
+
+def password_hash():
+    """The login password hash, or None when there is no account (deleted, or never set up)."""
+    return read_json(ACCOUNT_FILE).get("hash") or None
+
+
+@app.get("/api/account/status")
+def account_status():
+    return jsonify(exists=bool(password_hash()))
+
+
+@app.post("/api/account/create")
+def create_account():
+    """First-run / after-delete setup: choose the password. Only possible while there is no account."""
+    pw = str((request.get_json(silent=True) or {}).get("password", ""))
+    if len(pw) < 8:
+        return bad("password must be at least 8 characters")
+    with _lock:
+        if password_hash():
+            return bad("an account already exists", 409)
+        write_private(ACCOUNT_FILE, {"hash": generate_password_hash(pw, method="pbkdf2:sha256:600000")})
+        _new_secrets()  # secrets exist only once there is an account
+    session.clear()
+    session["auth"] = True
+    session.permanent = True
+    audit("account_created", ip=request.remote_addr)
+    return jsonify(ok=True)
+
+
+def locked(until):
+    secs = max(1, int(until - time.time() + 0.999))
+    r = jsonify(error=f"too many attempts, try again in {secs // 60}:{secs % 60:02d}", retry_after=secs)
+    r.status_code = 429
+    return r
+
+
+@app.get("/api/login/status")
+def login_status():
+    """Is login locked out for this visitor right now (and for how long)? `unlocked` is true after a lockout
+    has ended and until the next successful login, so the page can keep saying so."""
+    now = time.time()
+    untils = [db.lock_get(k)[1] for k in ("ip:" + str(request.remote_addr), "*")]
+    until = max(untils)
+    return jsonify(locked=until > now, retry_after=max(0, int(until - now + 0.999)) if until > now else 0,
+                   unlocked=until <= now and until > 0)
+
+
+LOCK_RULES = (("ip", 5), ("*", 20))  # (scope, failures allowed): per address, and all addresses together
+LOCK_SECS, LOCK_WINDOW = 300, 900  # lock length; failures older than this no longer count
+
+
 @app.post("/api/login")
 def login():
-    ip = request.remote_addr
+    keys = {"ip": "ip:" + str(request.remote_addr), "*": "*"}
     with _lock:
-        count, until = _fails.get(ip, (0, 0))
-        if until > time.time():
-            return bad("too many attempts, try later", 429)
+        now = time.time()
+        for k in keys.values():
+            until = db.lock_get(k)[1]
+            if until > now:
+                return locked(until)
     pw = str((request.get_json(silent=True) or {}).get("password", ""))
-    if check_password_hash(os.environ["UI_PASSWORD_HASH"], pw):
+    ph = password_hash()
+    if ph and check_password_hash(ph, pw):
         with _lock:
-            _fails.pop(ip, None)
+            db.lock_clear(*keys.values())
         session.clear()
         session["auth"] = True
         session.permanent = True
         return jsonify(ok=True)
+    until_max = 0
     with _lock:
-        count += 1
-        _fails[ip] = (count, time.time() + 300 if count >= 5 else 0)
-    audit("login_failed", ip=ip)
+        now = time.time()
+        for scope, limit in LOCK_RULES:  # persisted, so restarting the server doesn't unlock anyone
+            count, _, last = db.lock_get(keys[scope])
+            count = 1 if now - last > LOCK_WINDOW else count + 1
+            until = now + LOCK_SECS if count >= limit else 0
+            db.lock_set(keys[scope], count, until, now)
+            until_max = max(until_max, until)
+    audit("login_failed", ip=request.remote_addr)
     time.sleep(1)
+    if until_max:
+        return locked(until_max)
     return bad("wrong password", 401)
 
 
@@ -203,7 +266,243 @@ def logout():
     return jsonify(ok=True)
 
 
+def _rewrite_env(drop=(), set_=None):
+    """Edit .env in place: remove the `drop` keys, replace/append the `set_` ones (keeps the file's mode)."""
+    set_ = dict(set_ or {})
+    path = os.path.join(HERE, ".env")
+    try:
+        with open(path) as f:
+            lines = f.readlines()
+    except OSError:
+        lines = []
+    out = []
+    for ln in lines:
+        k = ln.split("=", 1)[0].strip()
+        if k in drop:
+            continue
+        if k in set_ and "=" in ln:
+            ln = f"{k}={set_.pop(k)}\n"
+        out.append(ln)
+    if out and not out[-1].endswith("\n"):
+        out[-1] += "\n"
+    out += [f"{k}={v}\n" for k, v in set_.items()]
+    try:
+        mode = os.stat(path).st_mode & 0o777
+    except OSError:
+        mode = 0o600
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as f:
+        f.writelines(out)
+    os.replace(path + ".tmp", path)
+
+
+def _new_secrets():
+    """Generate the session key and postback secret (written to .env) when an account is created."""
+    new = {"UI_SECRET_KEY": secrets.token_hex(24), "POSTBACK_SECRET": secrets.token_urlsafe(24)}
+    _rewrite_env(drop=("UI_PASSWORD_HASH", "ALERT_SECRET"), set_=new)
+    os.environ.update(new)
+    app.secret_key = new["UI_SECRET_KEY"]
+
+
+def _clear_secrets():
+    """Account deleted: remove the secrets from .env (none exist until a new account is created). Sessions use a
+    throwaway in-memory key meanwhile, so every old login cookie is invalid."""
+    _rewrite_env(drop=("UI_SECRET_KEY", "POSTBACK_SECRET", "UI_PASSWORD_HASH", "ALERT_SECRET"))
+    for k in ("UI_SECRET_KEY", "POSTBACK_SECRET", "UI_PASSWORD_HASH", "ALERT_SECRET"):
+        os.environ.pop(k, None)
+    app.secret_key = secrets.token_hex(24)
+
+
+def _init_secrets():
+    """Start-up: with an account, make sure its secrets exist; without one, create nothing."""
+    if password_hash():
+        if not (os.environ.get("UI_SECRET_KEY") and os.environ.get("POSTBACK_SECRET")):
+            _new_secrets()
+        app.secret_key = os.environ["UI_SECRET_KEY"]
+    else:  # no account: nothing should be left over from a previous one
+        _clear_secrets()
+
+
+EXPORT_FILES = ("limits.json", "webhooks.json", "added_brokers.json", "active_broker.json")
+CRED_FILE = re.compile(r"^[a-z0-9_]+\.json$")
+MAX_IMPORT = 64 * 1024 * 1024
+
+
+def _confirm_password(d):
+    """True if the request body's password is the account password."""
+    if check_password_hash(password_hash() or "", str(d.get("password", ""))):
+        return True
+    time.sleep(1)
+    return False
+
+
+@app.post("/api/account/password")
+def change_password():
+    d = request.get_json(silent=True) or {}
+    new = str(d.get("new", ""))
+    if not check_password_hash(password_hash() or "", str(d.get("current", ""))):
+        time.sleep(1)
+        return bad("current password is wrong", 401)
+    if len(new) < 8:
+        return bad("new password must be at least 8 characters")
+    with _lock:
+        write_private(ACCOUNT_FILE, {"hash": generate_password_hash(new, method="pbkdf2:sha256:600000")})
+    audit("password_changed", ip=request.remote_addr)
+    return jsonify(ok=True)
+
+
+@app.post("/api/account/export")
+def export_account():
+    """Everything the app stored for this account as one JSON file. It contains broker logins and webhook
+    URLs (secrets), so it needs the password. The password itself and the .env secrets are not included."""
+    if not _confirm_password(request.get_json(silent=True) or {}):
+        return bad("wrong password", 401)
+    with _lock:
+        files = {n: read_json(os.path.join(HERE, n)) for n in EXPORT_FILES if os.path.exists(os.path.join(HERE, n))}
+        creds = {}
+        for b in REGISTRY:
+            dd = os.path.join(CREDS_DIR, b)
+            if os.path.isdir(dd):
+                creds[b] = {f: read_json(os.path.join(dd, f)) for f in sorted(os.listdir(dd)) if CRED_FILE.match(f)}
+        bundle = {"format": "flash-export", "version": 1, "exported": time.time(), "files": files, "creds": creds,
+                  "db": db.export_all()}
+    audit("account_exported", ip=request.remote_addr)
+    resp = jsonify(bundle)
+    resp.headers["Content-Disposition"] = "attachment; filename=flash-export-%s.json" % time.strftime("%Y%m%d-%H%M")
+    return resp
+
+
+def _check_bundle(b):
+    """Validate an export file completely before anything is touched. Raises ValueError."""
+    if not isinstance(b, dict) or b.get("format") != "flash-export" or b.get("version") != 1:
+        raise ValueError("not a Flash export file")
+    files, creds = b.get("files"), b.get("creds")
+    if not isinstance(files, dict) or not isinstance(creds, dict):
+        raise ValueError("export file is malformed")
+    for n, v in files.items():
+        if n not in EXPORT_FILES or not isinstance(v, dict):
+            raise ValueError(f"unexpected file {str(n)[:40]}")
+    for h in files.get("webhooks.json", {}).get("hooks", []):
+        if not (isinstance(h, dict) and all(isinstance(h.get(k), str) and h[k] for k in ("id", "name", "secret"))
+                and isinstance(h.get("rules"), dict)):
+            raise ValueError("a webhook in the file is malformed")
+    for br, fl in creds.items():
+        if br not in REGISTRY or not isinstance(fl, dict):
+            raise ValueError(f"unknown broker {str(br)[:40]}")
+        for n, v in fl.items():
+            if not CRED_FILE.match(n) or not isinstance(v, dict):
+                raise ValueError(f"unexpected credential file {str(n)[:40]}")
+    db.check_export(b.get("db"))
+
+
+@app.post("/api/account/import")
+def import_account():
+    """Replace ALL current data with the contents of an export file (the password and .env secrets stay)."""
+    global broker
+    request.max_content_length = MAX_IMPORT  # exports can be big (they include the order history)
+    d = request.get_json(silent=True) or {}
+    if not _confirm_password(d):
+        return bad("wrong password", 401)
+    b = d.get("bundle")
+    try:
+        _check_bundle(b)
+    except ValueError as e:
+        return bad(str(e))
+    import shutil
+    with _auto_lock, _lock:
+        for n in EXPORT_FILES:
+            try:
+                os.remove(os.path.join(HERE, n))
+            except OSError:
+                pass
+        shutil.rmtree(CREDS_DIR, ignore_errors=True)
+        for n, v in b["files"].items():
+            write_private(os.path.join(HERE, n), v)
+        for br, fl in b["creds"].items():
+            os.makedirs(os.path.join(CREDS_DIR, br), mode=0o700, exist_ok=True)
+            for n, v in fl.items():
+                write_private(os.path.join(CREDS_DIR, br, n), v)
+        db.import_all(b["db"])
+        _instances.clear()
+        _pending.clear()
+        _perf_cache["data"] = None
+        broker = _initial_broker()
+    try:
+        load_scrips()
+    except Exception:  # noqa: BLE001 - the saved instrument list may belong to another broker
+        pass
+    audit("account_imported", ip=request.remote_addr)
+    return jsonify(ok=True)
+
+
+@app.post("/api/account/delete")
+def delete_account():
+    """Wipe everything the app stored (brokers + logins, webhooks, limits, logs, order history) and log out.
+    The password is erased too: the next visitor creates a new account (and password)."""
+    global broker
+    import shutil
+    d = request.get_json(silent=True) or {}
+    pw = str(d.get("password", ""))
+    if d.get("confirm") != "I want to DELETE MY ACCOUNT":
+        return bad("confirmation text missing")
+    if not check_password_hash(password_hash() or "", pw):
+        time.sleep(1)
+        return bad("wrong password", 401)
+    with _auto_lock, _lock:
+        for f in (LIMITS_FILE, ACTIVE_FILE, ADDED_FILE, HOOKS_FILE):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        shutil.rmtree(CREDS_DIR, ignore_errors=True)
+        db.reset()
+        _instances.clear()
+        _pending.clear()
+        _perf_cache["data"] = None
+        broker = _initial_broker()
+        write_private(ACCOUNT_FILE, {"hash": None})  # no account until a new one is created
+        _clear_secrets()
+        _quotes.clear()
+        for cls in REGISTRY.values():
+            try:
+                os.remove(os.path.join(HERE, cls.instrument_file))  # may be stale; a new account downloads its own
+            except OSError:
+                pass
+        _scrips.clear()
+        _nse.clear()
+        for log in ("ui.log", "postback.log"):  # the processes' stdout logs can hold order lines
+            try:
+                os.truncate(os.path.join(HERE, log), 0)
+            except OSError:
+                pass
+    session.clear()
+    return jsonify(ok=True)
+
+
 # ---------- read-only ----------
+@app.get("/api/instruments")
+def instruments_info():
+    try:
+        updated = os.path.getmtime(os.path.join(HERE, broker.instrument_file))
+    except OSError:
+        updated = None
+    return jsonify(count=len(_scrips), updated=updated, can_download=bool(added_brokers()))
+
+
+@app.post("/api/instruments/refresh")
+def instruments_refresh():
+    """Download the broker's instrument master now. Only ever runs because the user clicked the button."""
+    if not added_brokers():
+        return bad("add a broker first", 409)
+    with _lock:
+        try:
+            load_scrips(refresh=True)
+        except (requests.RequestException, OSError, KeyError, ValueError) as e:
+            return bad(f"download failed: {e}", 502)
+    audit("instruments_refreshed", count=len(_scrips), ip=request.remote_addr)
+    return instruments_info()
+
+
 @app.get("/api/search")
 def search():
     q = request.args.get("q", "").strip().upper()
@@ -248,6 +547,7 @@ def _initial_broker():
 
 
 broker = _initial_broker()
+_init_secrets()  # needs read_json/write_private, defined above
 
 
 def clean_name(v):
@@ -293,6 +593,7 @@ def auth_info():
     """Describes the active broker so the UI can label and show the right credential sections."""
     return jsonify(broker=tgt().name, display_name=tgt().display_name or tgt().name, kinds=list(tgt().auth_kinds),
                    token_label=tgt().token_label, oauth_label=tgt().oauth_label, oauth_help=tgt().oauth_help,
+                   login_first=tgt().verify_requires_login,
                    redirect_url=f"{public_base()}/auth/callback/{tgt().name}" if "oauth" in tgt().auth_kinds else "",
                    postback_url=postback_url(tgt()) if tgt().supports_postback else "")
 
@@ -305,8 +606,7 @@ ADDED_FILE = os.path.join(HERE, "added_brokers.json")  # brokers listed in the U
 
 
 def added_brokers():
-    names = [n for n in read_json(ADDED_FILE).get("names", []) if n in REGISTRY]
-    return names if broker.name in names else names + [broker.name]  # the active broker is always listed
+    return [n for n in read_json(ADDED_FILE).get("names", []) if n in REGISTRY]
 
 
 def _add_broker(name):  # caller holds _lock
@@ -318,19 +618,25 @@ def _add_broker(name):  # caller holds _lock
 @app.get("/api/brokers")
 def list_brokers():
     info = {b["name"]: b for b in available(HERE)}
-    mk = lambda n: {**info[n], "active": n == broker.name}
+    def mk(n):
+        g.bname = n  # _fingerprint() reads this broker's saved credentials
+        v = read_json(cpath("verified.json", n))
+        ok = any(v.get(src) and v.get(src) == _fingerprint(src) for src in ("token", "oauth"))
+        g.bname = None
+        return {**info[n], "active": n == broker.name, "verified": ok}
     return jsonify(active=broker.name, added=[mk(n) for n in added_brokers()],
                    addable=[info[n] for n in REGISTRY if n not in added_brokers()])
 
 
-@app.post("/api/brokers/add")
-def add_broker():
-    name = str((request.get_json(silent=True) or {}).get("name", "")).lower()
-    if name not in REGISTRY:
-        return bad("unknown broker")
-    with _lock:
-        _add_broker(name)
-    return jsonify(ok=True)
+def _register_broker(name):  # caller holds _lock
+    """List a broker in the UI. The first one listed becomes the active broker."""
+    global broker
+    first = not added_brokers()
+    _add_broker(name)
+    if first:
+        if name != broker.name:
+            broker = get_instance(name)
+        write_private(ACTIVE_FILE, {"name": name})
 
 
 @app.post("/api/brokers/remove")
@@ -340,10 +646,16 @@ def remove_broker():
     name = str((request.get_json(silent=True) or {}).get("name", "")).lower()
     if name not in REGISTRY:
         return bad("unknown broker")
-    if name == broker.name:
-        return bad("this is the active broker; switch to another one first", 409)
+    global broker
     with _lock:
-        write_private(ADDED_FILE, {"names": [n for n in added_brokers() if n != name]})
+        if name == broker.name and (load_limits()["trading_enabled"] or any(h["rules"].get("enabled") for h in load_hooks())):
+            return bad("turn off Trading (Limits) and disable all webhooks before deleting the active broker", 409)
+        rest = [n for n in added_brokers() if n != name]
+        write_private(ADDED_FILE, {"names": rest})
+        if name == broker.name and rest:  # hand over to the next listed broker
+            _instances.pop(name, None)
+            broker = get_instance(rest[0])
+            write_private(ACTIVE_FILE, {"name": rest[0]})
         shutil.rmtree(os.path.join(CREDS_DIR, name), ignore_errors=True)
         _instances.pop(name, None)
     audit("broker_deleted", name=name, ip=request.remote_addr)
@@ -412,7 +724,7 @@ def set_saved_token():
 
 def auth_mode(name=None):
     m = read_json(cpath("auth_mode.json", name))
-    return {"oauth": bool(m.get("oauth", False)), "token": bool(m.get("token", True))}
+    return {"oauth": bool(m.get("oauth", False)), "token": bool(m.get("token", False))}
 
 
 @app.get("/api/auth/mode")
@@ -494,7 +806,7 @@ def server_ip():
 
 @app.post("/api/auth/login")
 def oauth_login():
-    if not auth_mode()["oauth"]:
+    if not auth_mode()["oauth"] and not tgt().verify_requires_login:  # such brokers log in first, then verify
         return bad("Switch on the API key login first")
     b = read_json(cpath("app.json"))
     if not (b.get("api_key") and b.get("api_secret")):
@@ -528,6 +840,7 @@ def _mark_verified(src):
         v = read_json(cpath("verified.json"))
         v[src] = _fingerprint(src)
         write_private(cpath("verified.json"), v)
+        _register_broker(g.get("bname") or broker.name)  # a broker is listed only once its credentials verify
 
 
 @app.get("/api/auth/verified")
@@ -569,6 +882,8 @@ def _verify_source(src):
         except requests.RequestException:
             return (False, f"could not reach {tgt().display_name}", 502)
         t = read_json(cpath("oauth_token.json"))
+        if tgt().verify_requires_login and not (t.get("token") and t.get("expiry", 0) > time.time()):
+            return (False, f"log in to {tgt().display_name} first: the API key can only be checked by a login", 400)
         if t.get("token") and t.get("expiry", 0) > time.time():
             code, body = tgt().funds(token=t["token"])
             if code != 200:
@@ -602,7 +917,7 @@ def oauth_callback(name):
         fresh = any(time.time() - t < 600 for (n, _), t in _pending.items() if n == name)
         for k in [k for k in _pending if k[0] == name]:
             del _pending[k]
-    if not (name == tgt().name and fresh and auth_mode()["oauth"] and b.get("api_key")):
+    if not (name == tgt().name and fresh and (auth_mode()["oauth"] or tgt().verify_requires_login) and b.get("api_key")):
         return "No login is pending. Start it from the dashboard.", 400, txt
     try:
         tok, exp = tgt().oauth_finish(b["api_key"], b["api_secret"], request.args.to_dict())
@@ -612,6 +927,7 @@ def oauth_callback(name):
     with _lock:
         write_private(cpath("oauth_token.json"), {"token": tok, "expiry": exp, "ts": time.time()})
     audit("oauth_login_ok", broker=name, ip=request.remote_addr)
+    verify_source("oauth")  # a fresh login that works counts as verified (and lists the broker)
     return "Login complete. You can close this tab and return to the dashboard.", 200, txt
 
 
@@ -835,17 +1151,18 @@ MAX_HOOKS = 10
 
 
 def load_hooks():
-    """Named webhooks, each with its own secret URL and rules. First run creates a "Default" hook
-    (secret = ALERT_SECRET, default rules)."""
-    h = read_json(HOOKS_FILE).get("hooks")
-    if not h:
-        h = [{"id": "default", "name": "Default", "secret": os.environ["ALERT_SECRET"], "rules": dict(DEFAULT_AUTO)}]
-        write_private(HOOKS_FILE, {"hooks": h})  # no _lock: callers may already hold it; runs once at startup
+    """Named webhooks, each with its own secret URL and rules. None exist until the user adds one."""
+    h = read_json(HOOKS_FILE).get("hooks") or []
     return [{**x, "rules": {**DEFAULT_AUTO, **x["rules"]}} for x in h]
 
 
+def load_defaults():
+    """Rules a new webhook starts with: the user's saved defaults over the built-in ones."""
+    return {**DEFAULT_AUTO, **read_json(HOOKS_FILE).get("defaults", {})}
+
+
 def save_hooks(h):  # caller holds _lock
-    write_private(HOOKS_FILE, {"hooks": h})
+    write_private(HOOKS_FILE, {**read_json(HOOKS_FILE), "hooks": h})
 
 
 def hook_scope(hook):  # key of this webhook's daily state row
@@ -1503,14 +1820,34 @@ def add_webhook():
         hooks = load_hooks()
         if len(hooks) >= MAX_HOOKS:
             return bad(f"at most {MAX_HOOKS} webhooks")
+        d = request.get_json(silent=True) or {}
         try:
-            name = _hook_name(request.get_json(silent=True) or {}, hooks)
+            name = _hook_name(d, hooks)
+            rules = validate_auto(d)
         except ValueError as e:
             return bad(str(e))
-        h = {"id": uuid.uuid4().hex[:8], "name": name, "secret": secrets.token_urlsafe(24), "rules": dict(DEFAULT_AUTO)}
-        save_hooks(hooks + [h])  # new hooks start disabled, dry-run
+        h = {"id": uuid.uuid4().hex[:8], "name": name, "secret": secrets.token_urlsafe(24), "rules": rules}
+        save_hooks(hooks + [h])
     audit("webhook_added", id=h["id"], name=name)
     return jsonify(_hook_json(h, datetime.datetime.now(IST).strftime("%Y-%m-%d")))
+
+
+@app.get("/api/webhooks/defaults")
+def get_defaults():
+    return jsonify(load_defaults())
+
+
+@app.post("/api/webhooks/defaults")
+def save_defaults():
+    try:
+        rules = validate_auto(request.get_json(silent=True) or {})
+    except ValueError as e:
+        return bad(str(e))
+    rules["enabled"] = False
+    with _lock:
+        write_private(HOOKS_FILE, {**read_json(HOOKS_FILE), "defaults": rules})
+    audit("webhook_defaults", **rules)
+    return jsonify(rules)
 
 
 @app.post("/api/webhooks/<hid>")
@@ -1542,8 +1879,6 @@ def delete_webhook(hid):
         h = next((x for x in hooks if x["id"] == hid), None)
         if not h:
             return bad("not found", 404)
-        if len(hooks) == 1:
-            return bad("keep at least one webhook")
         save_hooks([x for x in hooks if x["id"] != hid])
     audit("webhook_deleted", id=hid, name=h["name"])
     return jsonify(ok=True)
@@ -1627,7 +1962,6 @@ def index():
 
 if __name__ == "__main__":
     load_scrips()
-    load_hooks()  # create the Default webhook on first run
     port = int(os.environ.get("UI_PORT", 8081))
     host = os.environ.get("UI_HOST", "127.0.0.1")
     print(f"UI on {host}:{port}, {len(_scrips)} instruments", flush=True)
