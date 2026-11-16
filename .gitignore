@@ -32,3 +32,5 @@ venv/
 .idea/
 .vscode/
 .DS_Store
+simulator_state.json
+custom-instruments.json

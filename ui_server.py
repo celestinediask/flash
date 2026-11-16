@@ -23,7 +23,7 @@ import zoneinfo
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, g, has_request_context, jsonify, request, send_from_directory, session
+from flask import Flask, g, has_request_context, jsonify, make_response, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
@@ -31,7 +31,6 @@ from brokers import OPEN_STATUSES, REGISTRY, BrokerError, available, get_broker,
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(HERE, ".env"))
-
 LIMITS_FILE = os.path.join(HERE, "limits.json")
 ACTIVE_FILE = os.path.join(HERE, "active_broker.json")  # broker chosen in the UI
 CREDS_DIR = os.path.join(HERE, "creds")  # per-broker credential files, 0600 inside a 0700 dir
@@ -147,13 +146,22 @@ def bad(msg, code=400):
     return jsonify(error=msg), code
 
 
+@app.errorhandler(requests.RequestException)
+def broker_unreachable(e):
+    """A broker call that could not reach the broker (down, refused, timed out): a clear 502 the page can show."""
+    app.logger.warning("broker unreachable on %s: %s", request.path, type(e).__name__)
+    if request.path.startswith("/api/"):
+        return jsonify(error="Broker connection not available", unreachable=True), 502
+    return "Internal Server Error", 500
+
+
 @app.before_request
 def guard():
     if request.path.startswith("/api/") and request.path not in ("/api/login", "/api/login/status", "/api/account/status", "/api/account/create"):
         if not session.get("auth"):
             return bad("not logged in", 401)
     p = request.path
-    if p.startswith(("/api/auth", "/api/broker-config", "/auth/callback/")) or p == "/dhan/callback":
+    if p.startswith(("/api/auth", "/api/broker-config", "/api/instruments", "/auth/callback/")) or p == "/dhan/callback":
         n = p.rsplit("/", 1)[1] if p.startswith("/auth/callback/") else "dhan" if p == "/dhan/callback" else (
             request.args.get("broker") or (request.get_json(silent=True) or {}).get("broker") or broker.name)
         if n not in REGISTRY:
@@ -165,7 +173,7 @@ def guard():
 
 @app.after_request
 def headers(resp):
-    resp.headers["Cache-Control"] = "no-store"
+    resp.headers.setdefault("Cache-Control", "no-store")
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
@@ -329,7 +337,7 @@ MAX_IMPORT = 64 * 1024 * 1024
 
 
 def _confirm_password(d):
-    """True if the request body's password is the account password."""
+    """True if the request body's password is the password of one of the account's users."""
     if check_password_hash(password_hash() or "", str(d.get("password", ""))):
         return True
     time.sleep(1)
@@ -482,24 +490,34 @@ def delete_account():
 # ---------- read-only ----------
 @app.get("/api/instruments")
 def instruments_info():
+    """The instrument list of one broker (?broker=, default the active one); each broker keeps its own saved copy."""
+    b = tgt()
     try:
-        updated = os.path.getmtime(os.path.join(HERE, broker.instrument_file))
+        updated = os.path.getmtime(os.path.join(HERE, b.instrument_file))
     except OSError:
         updated = None
-    return jsonify(count=len(_scrips), updated=updated, can_download=bool(added_brokers()))
+    try:
+        count = len(_scrips) if b.name == broker.name else (len(b.load_instruments(HERE)) if updated else 0)
+    except Exception:  # noqa: BLE001 - an unreadable saved copy counts as none
+        count = 0
+    return jsonify(count=count, updated=updated, can_download=b.name in added_brokers())
 
 
 @app.post("/api/instruments/refresh")
 def instruments_refresh():
-    """Download the broker's instrument master now. Only ever runs because the user clicked the button."""
-    if not added_brokers():
-        return bad("add a broker first", 409)
+    """Download one broker's instrument master now. Only ever runs because the user clicked the button."""
+    b = tgt()
+    if b.name not in added_brokers():
+        return bad("verify this broker's login first", 409)
     with _lock:
         try:
-            load_scrips(refresh=True)
-        except (requests.RequestException, OSError, KeyError, ValueError) as e:
+            if b.name == broker.name:
+                load_scrips(refresh=True)  # the active broker's list is also the one in memory
+            else:
+                b.load_instruments(HERE, refresh=True)  # saved for when it becomes active
+        except (requests.RequestException, OSError, KeyError, ValueError, BrokerError) as e:
             return bad(f"download failed: {e}", 502)
-    audit("instruments_refreshed", count=len(_scrips), ip=request.remote_addr)
+    audit("instruments_refreshed", broker=b.name, count=len(_scrips), ip=request.remote_addr)
     return instruments_info()
 
 
@@ -574,7 +592,10 @@ def set_broker_config():
     new = {}
     for f in tgt().config_fields:
         v = str(d.get(f["name"], "")).strip()
-        if not _is_key(v, 1, 128):
+        if f.get("kind") == "url":
+            if not (v.startswith(("http://", "https://")) and len(v) <= 200 and v.isprintable() and " " not in v):
+                return bad(f"invalid {f['label']}: it must start with http:// or https://")
+        elif not _is_key(v, 1, 128):
             return bad(f"invalid {f['label']}")
         new[f["name"]] = v
     name = tgt().name
@@ -583,7 +604,6 @@ def set_broker_config():
         _instances.pop(name, None)  # picks up the new settings
         if name == broker.name:
             broker = get_instance(name)
-        _add_broker(name)
     audit("broker_config_updated", broker=name, ip=request.remote_addr)
     return jsonify(ok=True)
 
@@ -688,7 +708,7 @@ def select_broker():
 @app.get("/api/auth/token")
 def get_saved_token():
     t = read_json(cpath("token.json"))
-    return jsonify(app_name=t.get("app_name", ""), has_token=bool(get_token()), updated=t.get("ts"))
+    return jsonify(app_name=t.get("app_name", ""), has_token=bool(get_token(tgt().name)), updated=t.get("ts"))
 
 
 @app.post("/api/auth/token")
@@ -949,6 +969,84 @@ def orders():
     return jsonify(body), code
 
 
+STUCK_EXIT_SECS = 90  # an exit still not done this long after it first went out is "stuck"
+
+
+def _stuck_exits(label, state, pos):
+    """Notices for positions whose TP/SL exit went out long ago and which are still open."""
+    open_syms = {p["symbol"] for p in pos if p.get("net_qty")}
+    out = []
+    for sym, o in state.get("opened", {}).items():
+        ft = o.get("exit_first_ts")
+        if ft and sym in open_syms and time.time() - ft >= STUCK_EXIT_SECS:
+            mins = int((time.time() - ft) // 60)
+            out.append({"level": "bad", "text": f"{label}: {sym} exit not filled for {mins} min ({o.get('exit_tries', 1)} attempt(s)). The position is still open, check the broker."})
+    return out
+
+
+def _notices(today, pos):
+    """Important messages for the Home page that no card already shows: live webhooks blocked by the Trading switch,
+    and TP/SL exits that are stuck. (The daily limits have their own bars on each webhook's card.)
+    `pos` is the broker's positions list, or None when it could not be read (the stuck-exit check is then skipped)."""
+    out = []
+    hooks = [h for h in load_hooks() if h["rules"]["enabled"]]
+    if any(h["rules"]["mode"] == "live" for h in hooks) and not load_limits()["trading_enabled"]:
+        out.append({"level": "warn", "text": "Trading is switched off in Settings, so live webhooks will not place orders."})
+    if pos is not None:  # stuck TP/SL exits, for every webhook (even a disabled one still has positions) and for manual orders
+        for h in load_hooks():
+            out += _stuck_exits(h["name"], auto_state(today, h), pos)
+        out += _stuck_exits("Manual", manual_state(today), pos)
+    return out
+
+
+def _limits(today, pos):
+    """Progress of each enabled webhook's daily limits, for the Home bars: {name, bars: [{label, used, max, money}]}.
+    `max` includes anything added for today. The broker-based bars (positions, loss) are left out when `pos` is None."""
+    held = len({p["symbol"] for p in pos if p.get("net_qty")}) if pos is not None else 0
+    lost = max(0.0, -sum(p["realized_pnl"] + p["unrealized_pnl"] for p in pos)) if pos is not None else 0.0
+    out = []
+    for h in load_hooks():
+        r = h["rules"]
+        if not r["enabled"]:
+            continue
+        st = auto_state(today, h)
+
+        steps = {"trades": 1, "positions": 1, "capital": max(100, round(r["capital_per_stock"])), "loss": 100}  # what one + / - tap changes
+
+        def bar(label, what, used, money):
+            return {"label": label, "key": what, "used": used, "max": day_limit(r, st, what), "extra": st.get("extra_" + what, 0),
+                    "money": money, "step": steps[what]}
+        bars = [bar("Daily trades", "trades", st["trades"], False), bar("Daily capital", "capital", round(st["capital"], 2), True)]
+        if pos is not None:
+            bars += [bar("Open positions", "positions", held, False), bar("Daily loss", "loss", round(lost, 2), True)]
+        out.append({"id": h["id"], "name": h["name"], "bars": bars})
+    return out
+
+
+@app.get("/api/today")
+def today_summary():
+    """Home-page totals for today: alerts received, orders, the gross profit / loss over the positions, and notices."""
+    day = datetime.datetime.now(IST).strftime("%Y-%m-%d")
+    out = {"alerts": db.count_alerts_day(day), "orders": None, "profit": None, "loss": None, "net": None}
+    pos = None
+    try:
+        code, body = broker.orders()
+        if code == 200 and isinstance(body, list):
+            out["orders"] = len(body)
+        code, p = broker.positions()
+        if code == 200 and isinstance(p, list):
+            pos = p
+            pl = [x["realized_pnl"] + x["unrealized_pnl"] for x in pos]
+            out["profit"] = round(sum(x for x in pl if x > 0), 2)
+            out["loss"] = round(-sum(x for x in pl if x < 0), 2)
+            out["net"] = round(sum(pl), 2)
+    except (requests.RequestException, BrokerError, KeyError, TypeError):
+        pass  # the broker part stays null ("-" on the page); the alert count is local
+    out["notices"] = _notices(day, pos)
+    out["limits"] = _limits(day, pos)
+    return jsonify(out)
+
+
 @app.get("/api/limits")
 def get_limits():
     return jsonify(load_limits())
@@ -1120,6 +1218,7 @@ def place():
                 st["opened"][summary["_symbol"]] = {"order_ids": [str(body["order_id"])], "tick": summary["_watch"]["tick"],
                                                     "tpsl": {k: v for k, v in summary["_watch"].items() if k != "tick"}}
                 db.set_state(MANUAL_SCOPE, st)
+                _tpsl_idle_until.pop("Manual", None)  # watch the new position straight away
     return jsonify(body), code
 
 
@@ -1278,6 +1377,19 @@ def auto_state(today, hook):
     return {"date": today, "trades": 0, "capital": 0.0, "last": {}, "opened": {}, "exit_attempts": 0, "exit_done": False}
 
 
+LIMIT_RULES = {"trades": "max_daily_trades", "capital": "max_daily_capital", "positions": "max_positions", "loss": "max_daily_loss"}
+
+
+def day_limit(rules, state, what):
+    """One of today's limits: the webhook's saved limit plus whatever was added (or taken off) for today from the Home page.
+    The extras live in today's state row, so they disappear on their own when the day changes."""
+    return rules[LIMIT_RULES[what]] + state.get("extra_" + what, 0)
+
+
+def day_limits(rules, state):
+    return day_limit(rules, state, "trades"), day_limit(rules, state, "capital")
+
+
 def auto_log(**kw):
     db.add_auto_log(**kw)
 
@@ -1312,8 +1424,8 @@ def run_auto(payload, hook):
         return done("ignored: automation disabled")
     if not symbols:
         return done("ignored: no symbols in alert")
-    if now.weekday() >= 5 or not (rules["window_start"] <= now.strftime("%H:%M") <= rules["window_end"]):
-        return done(f"ignored: outside window {rules['window_start']}-{rules['window_end']} IST (now {now:%a %H:%M})")
+    if not (rules["window_start"] <= now.strftime("%H:%M") <= rules["window_end"]):
+        return done(f"ignored: outside window {rules['window_start']}-{rules['window_end']} IST (now {now:%H:%M})")
     if rules["exit_time"] and now.strftime("%H:%M") >= rules["exit_time"]:
         return done(f"ignored: past exit time {rules['exit_time']} IST")
     if live and not load_limits()["trading_enabled"]:
@@ -1327,19 +1439,22 @@ def run_auto(payload, hook):
         return done(f"blocked: positions unavailable ({e})")
     held = {p["symbol"] for p in pos if p.get("net_qty")}
     pnl = sum(p["realized_pnl"] + p["unrealized_pnl"] for p in pos)
-    if pnl <= -rules["max_daily_loss"]:
-        return done(f"blocked: daily loss {pnl:.2f} reached limit -{rules['max_daily_loss']}", pnl=pnl)
-
     state = auto_state(now.strftime("%Y-%m-%d"), hook)
+    max_loss = day_limit(rules, state, "loss")
+    if pnl <= -max_loss:
+        return done(f"blocked: daily loss {pnl:.2f} reached limit -{max_loss}", pnl=pnl)
+
     decisions, placed = [], 0
     for sym in symbols:
         if placed >= rules["stocks_per_alert"]:
             break
-        if len(held) >= rules["max_positions"]:
-            decisions.append({"symbol": sym, "action": "stop", "reason": f"max positions ({rules['max_positions']}) reached"})
+        max_pos = day_limit(rules, state, "positions")
+        if len(held) >= max_pos:
+            decisions.append({"symbol": sym, "action": "stop", "reason": f"max positions ({max_pos}) reached"})
             break
-        if state["trades"] >= rules["max_daily_trades"]:
-            decisions.append({"symbol": sym, "action": "stop", "reason": f"max daily trades ({rules['max_daily_trades']}) reached"})
+        max_trades, max_capital = day_limits(rules, state)
+        if state["trades"] >= max_trades:
+            decisions.append({"symbol": sym, "action": "stop", "reason": f"max daily trades ({max_trades}) reached"})
             break
 
         def skip(reason):
@@ -1357,8 +1472,8 @@ def run_auto(payload, hook):
             skip(f"cooldown ({rules['cooldown_minutes']} min)")
             continue
         q = get_quote(sym, "NSE_EQ")
-        if not q or q["age"] > MAX_QUOTE_AGE:
-            skip("no fresh live price")
+        if not q:  # an old quote (e.g. market closed) is still used for sizing; only a missing one skips
+            skip("no live price (quote fetch failed)")
             continue
         tick = sc["tick"]
         price = round(round(q["price"] / tick) * tick, 2)
@@ -1371,8 +1486,8 @@ def run_auto(payload, hook):
             skip(f"price {sp} exceeds capital per stock {rules['capital_per_stock']}")
             continue
         value = qty * sp
-        if state["capital"] + value > rules["max_daily_capital"]:
-            skip(f"would exceed max daily capital ({state['capital']:.0f}+{value:.0f} > {rules['max_daily_capital']:.0f})")
+        if state["capital"] + value > max_capital:
+            skip(f"would exceed max daily capital ({state['capital']:.0f}+{value:.0f} > {max_capital:.0f})")
             continue
         cid = uuid.uuid4().hex[:20]
         order = broker.make_order(
@@ -1419,6 +1534,8 @@ def run_auto(payload, hook):
             o["tpsl"] = {"side": rules["side"], "tp_pct": rules["tp_pct"], "sl_pct": rules["sl_pct"],
                          "product": rules["product"], "ref": price, "ts": time.time()} if use_tpsl else None
             o.pop("tpsl_exit", None)  # new entry: re-arm
+            o.pop("exit_first_ts", None), o.pop("exit_tries", None)
+            _tpsl_idle_until.pop(hook["name"], None)  # watch the new position straight away
             db.set_state(scope, state)
         decisions.append({**d, "action": "PLACED" if code == 200 else "REJECTED", "http": code, "response": body})
         held.add(sym)
@@ -1512,7 +1629,8 @@ def _exit_finish(state, log, hook, retry, save=True):
     if not retry or state["exit_attempts"] >= 5:
         state["exit_done"] = True
         if retry:
-            log["steps"].append("GAVE UP after 5 attempts - positions may still be open, check the broker")
+            state["exit_gave_up"] = True  # TP/SL keeps watching these positions (see tpsl_check) until they close
+            log["steps"].append("GAVE UP after 5 attempts - positions may still be open, check the broker; TP/SL keeps watching them")
     if save:
         db.set_state(hook_scope(hook), state)
     auto_log(**log)
@@ -1526,7 +1644,7 @@ def exit_loop():
             for hook in load_hooks():
                 try:
                     et = hook["rules"]["exit_time"]
-                    if et and now.weekday() < 5 and now.strftime("%H:%M") >= et:
+                    if et and now.strftime("%H:%M") >= et:
                         with _auto_lock:
                             run_exit(now, hook)
                 except Exception as e:  # one webhook failing must not stop the others
@@ -1535,22 +1653,31 @@ def exit_loop():
             print("exit loop error:", repr(e), flush=True)
 
 
+_tpsl_idle_until = {}  # webhook name -> time before which tpsl_scan skips the broker call (no open tracked position)
+
+
 def tpsl_scan(state, label, rules):
     """Internal TP/SL: compare the live price with the filled average price and square off with a MARKET order.
     An exit order still unfilled after `timeout` seconds (0 = never) is cancelled; the next scan re-reads the
     position and sends a fresh exit if the TP/SL is still hit. Returns True if `state` changed and must be saved."""
     watch = {s: o for s, o in state.get("opened", {}).items() if o.get("tpsl")}
-    if not watch:
+    if not watch or time.time() < _tpsl_idle_until.get(label, 0):
         return False
     code, pos = broker.positions()
     if code != 200 or not isinstance(pos, list):
         return False
+    # nothing open to guard: look again in 30 s instead of every 3 s, so an idle account is not polled all night
+    live = any(p["symbol"] in watch and p["net_qty"] and p["product"] == watch[p["symbol"]]["tpsl"]["product"] for p in pos)
+    _tpsl_idle_until[label] = 0 if live else time.time() + 30
     dirty = False
     timeout = rules["exit_timeout"]  # 0 = never cancel
     for p in pos:
         sym, o = p["symbol"], watch.get(p["symbol"])
         net = p["net_qty"]
-        if not o or not net or p["product"] != o["tpsl"]["product"] or o.get("tpsl_gave_up"):
+        if o and not net and (o.pop("exit_first_ts", None) is not None):  # closed: no longer a stuck exit
+            o.pop("exit_tries", None)
+            dirty = True
+        if not o or not net or p["product"] != o["tpsl"]["product"]:
             continue
         w = o["tpsl"]
         avg, px = p["avg_price"], p["last_price"]  # last_price: the broker's own live price, None if unknown
@@ -1569,14 +1696,9 @@ def tpsl_scan(state, label, rules):
                 cc, cb = broker.cancel_order(prev["order_id"])
                 auto_log(event="tpsl_exit_timeout", webhook=label, symbol=sym, order_id=prev["order_id"],
                          after=timeout, http=cc, response=cb, gave_up=False)
-                if cc == 200:  # any re-send happens on the next scan, once the position size is re-read (it may have part-filled)
+                if cc == 200:  # the next scan re-reads the position (it may have part-filled) and sends a fresh exit if the TP/SL is still hit
                     o.pop("tpsl_exit", None)
                     dirty = True
-                    if rules["order_method"] != "market_resend" or o.get("exit_sent", 1) > MAX_RESENDS:
-                        o["tpsl_gave_up"] = True  # market / limit: one attempt; market + resend: out of attempts
-                        auto_log(event="tpsl_exit_timeout", webhook=label, symbol=sym, order_id=prev["order_id"],
-                                 after=timeout, http=cc, response=cb, gave_up=True)
-                        continue
                 continue
         hit = ("TP" if px >= tp_p else "SL" if px <= sl_p else None) if long_ else \
               ("TP" if px <= tp_p else "SL" if px >= sl_p else None)
@@ -1589,7 +1711,13 @@ def tpsl_scan(state, label, rules):
         cid = uuid.uuid4().hex[:20]
         order = exit_order(rules, "SELL" if long_ else "BUY", p, abs(net), tick, cid)
         audit("auto_tpsl_submit", reason=hit, price=px, avg=avg, tp=tp_p, sl=sl_p, order=order)
-        c, b = broker.place_order(order)
+        o.setdefault("exit_first_ts", time.time())  # when this position's exit first went out: the Home page warns if it is still open long after
+        o["exit_tries"] = o.get("exit_tries", 0) + 1
+        dirty = True
+        try:
+            c, b = broker.place_order(order)
+        except requests.RequestException as e:  # a network error is a failed attempt, retried on the next scan
+            c, b = 599, {"error": f"network error: {e}"}
         audit("auto_tpsl_result", code=c, body=b, correlationId=cid)
         auto_log(event="tpsl_exit", webhook=label, symbol=sym, reason=hit, price=px, avg=avg,
                  tp=tp_p, sl=sl_p, http=c, response=b)
@@ -1644,7 +1772,7 @@ def tpsl_check(now, hook):
     if hook["rules"]["mode"] != "live":
         return
     state = auto_state(now.strftime("%Y-%m-%d"), hook)
-    if state.get("exit_done"):
+    if state.get("exit_done") and not state.get("exit_gave_up"):  # a finished square-off has nothing left to watch; a gave-up one still does
         return
     dirty = entry_timeout_scan(state, hook["name"], hook["rules"])
     dirty = tpsl_scan(state, hook["name"], hook["rules"]) or dirty
@@ -1671,9 +1799,7 @@ def tpsl_loop():
     while True:
         time.sleep(3)
         try:
-            now = datetime.datetime.now(IST)
-            if now.weekday() >= 5 or not ("09:15" <= now.strftime("%H:%M") <= "15:30"):
-                continue
+            now = datetime.datetime.now(IST)  # no clock window: the watcher guards any open tracked position, whatever the hour
             for hook in load_hooks():
                 try:
                     with _auto_lock:
@@ -1704,7 +1830,8 @@ def alert(secret):
 def _hook_json(h, today):
     st = auto_state(today, h)
     return {"id": h["id"], "name": h["name"], "url": f"{request.host_url}alert/{h['secret']}", "rules": h["rules"],
-            "today": {"trades": st["trades"], "capital": round(st["capital"], 2)}}
+            "today": {"trades": st["trades"], "capital": round(st["capital"], 2), "exit_done": bool(st.get("exit_done")),
+                      "max_trades": day_limit(h["rules"], st, "trades"), "max_capital": day_limit(h["rules"], st, "capital")}}
 
 
 def _hook_name(d, hooks, me=None):
@@ -1872,6 +1999,39 @@ def save_webhook(hid):
     return jsonify(_hook_json(h, datetime.datetime.now(IST).strftime("%Y-%m-%d")))
 
 
+@app.post("/api/webhooks/<hid>/extend")
+def extend_daily(hid):
+    """Raise or lower one of a webhook's limits for TODAY only (`amount` may be negative). Never changes the saved rules:
+    the change sits in today's state row and is gone tomorrow."""
+    d = request.get_json(silent=True) or {}
+    what = d.get("what")
+    if what not in LIMIT_RULES:
+        return bad("what must be trades, capital, positions or loss")
+    try:
+        amount = float(d.get("amount"))
+    except (TypeError, ValueError):
+        return bad("amount must be a number")
+    whole = what in ("trades", "positions")
+    if amount == 0 or (whole and amount != int(amount)):
+        return bad("enter a whole number, not 0" if whole else "enter an amount, not 0")
+    amount = int(amount) if whole else amount
+    if abs(amount) > (1000 if whole else 100_000_000):
+        return bad("that is too large")
+    key = "extra_" + what
+    with _lock:
+        h = next((x for x in load_hooks() if x["id"] == hid), None)
+        if not h:
+            return bad("not found", 404)
+        st = auto_state(datetime.datetime.now(IST).strftime("%Y-%m-%d"), h)
+        if day_limit(h["rules"], st, what) + amount < 0:
+            return bad("today's limit cannot go below 0")
+        was = st.get(key, 0)
+        st[key] = was + amount
+        db.set_state(hook_scope(h), st)
+    audit("webhook_daily_limit_changed", id=hid, name=h["name"], what=what, change=amount, extra_today=st[key], ip=request.remote_addr)
+    return jsonify(ok=True)
+
+
 @app.post("/api/webhooks/<hid>/delete")
 def delete_webhook(hid):
     with _lock:
@@ -1930,9 +2090,20 @@ def auto_log_tail():
 
 @app.get("/api/auto/alert/latest")
 def auto_alert_latest():
-    """Newest webhook alert's id/ts; the page polls this to play a sound when it changes."""
-    a = db.latest_alert()
-    return jsonify(id=a[0] if a else 0, ts=a[1] if a else 0)
+    """Newest webhook alert's id/ts; the page polls this to play a sound when it changes.
+    One DB read per second at most, however many tabs are polling."""
+    now = time.monotonic()
+    if now - _latest_alert[0] > 1:
+        a = db.latest_alert()
+        _latest_alert[:] = [now, a[0] if a else 0, a[1] if a else 0, db.latest_log_id()]
+    out = {"id": _latest_alert[1], "ts": _latest_alert[2], "log": _latest_alert[3]}
+    for k in ("alerts", "logs"):  # alerts since the id each nav tab was last viewed at (for the tab's number badge)
+        since = request.args.get("since_" + k, type=int)
+        out["new_" + k] = db.count_alerts_since(since) if since is not None and since < out["id"] else 0
+    return jsonify(out)
+
+
+_latest_alert = [-10, 0, 0, 0]  # [fetched_at, newest alert id, its ts, newest log row id]
 
 
 @app.get("/api/auto/log/dates")
@@ -1954,10 +2125,31 @@ def favicon():
 
 @app.get("/")
 def index():
+    return _page_response()
+
+
+_page_cache = {}
+
+
+def _page():
     import html
     with open(os.path.join(HERE, "ui", "index.html"), encoding="utf-8") as f:
-        page = f.read().replace("{{APP_NAME}}", html.escape(os.environ.get("APP_NAME", "Orders")))
-    return page, 200, {"Content-Type": "text/html; charset=utf-8"}
+        return f.read().replace("{{APP_NAME}}", html.escape(os.environ.get("APP_NAME", "Orders")))
+
+
+def _page_response():
+    """The page is the same static shell for everyone (no secrets), so it is cached in memory and the browser
+    revalidates it with an ETag: an unchanged page costs a 304 with no body. Editing the file takes effect at once."""
+    mtime = os.stat(os.path.join(HERE, "ui", "index.html")).st_mtime_ns
+    if _page_cache.get("mtime") != mtime:
+        import hashlib
+        body = _page()
+        _page_cache.update(mtime=mtime, body=body, etag=hashlib.sha1(body.encode()).hexdigest()[:16])
+    resp = make_response(_page_cache["body"])
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.set_etag(_page_cache["etag"])
+    return resp.make_conditional(request)
 
 
 if __name__ == "__main__":

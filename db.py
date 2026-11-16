@@ -200,6 +200,24 @@ def latest_alert():
     return (r[0], r[1]) if r else None
 
 
+def latest_log_id():
+    """Id of the newest automation-log row of any kind (alerts, exits, TP/SL, timeouts), or 0."""
+    r = conn().execute("SELECT MAX(id) FROM auto_log").fetchone()
+    return r[0] or 0
+
+
+def count_alerts_since(after_id):
+    """How many webhook alerts were logged after the automation-log row `after_id`."""
+    return conn().execute("SELECT COUNT(*) FROM auto_log WHERE id > ? AND json_extract(data, '$.event') = 'alert'",
+                          (after_id,)).fetchone()[0]
+
+
+def count_alerts_day(day):
+    """How many webhook alerts were logged on `day` (YYYY-MM-DD)."""
+    return conn().execute("SELECT COUNT(*) FROM auto_log WHERE day = ? AND json_extract(data, '$.event') = 'alert'",
+                          (day,)).fetchone()[0]
+
+
 def latest_postback(broker, order_id):
     """Newest pushed update for an order with a status, or None."""
     r = conn().execute("SELECT data FROM postbacks WHERE broker=? AND order_id=? AND status IS NOT NULL "

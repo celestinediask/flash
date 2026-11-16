@@ -2,369 +2,589 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
 <title>{{APP_NAME}}</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
-  :root { --bg:#0e1116; --fg:#e6e8eb; --hd:#161b22; --card:#171c24; --mut:#9aa4b2; --bd:#2d3542; --in:#0e1116; --on:#2f6feb; --errbg:#5a1f24; --okbg:#1c4a2e; --hov:#232b38; color-scheme: dark; }
-  :root { --s1:#3987e5; --pos:#1baf7a; --neg:#eb6834; }
-  :root.light { --s1:#2a78d6; --bg:#f4f5f7; --fg:#1b1f24; --hd:#fff; --card:#fff; --mut:#555; --bd:#bbb; --in:#fff; --on:#1b1f24; --errbg:#fdd; --okbg:#dfd; --hov:#eef; color-scheme: light; }
-  body { font: 14px system-ui, sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
-  header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--bd); background: var(--hd); color: var(--fg); padding: 10px 16px; display: flex; gap: 16px; align-items: center; }
-  header .sp { flex: 1; }
-  #lockPage { max-width: 520px; margin: 80px auto; text-align: center; }
-  #lockPage h2 { font-size: 20px; } #lockPage.err h2, #lockPage.err #lockTime { color: #d33; } #lockPage.ok h2 { color: #0b6; }
-  #lockTime { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 12px 0; }
-  #toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: min(92vw, 420px); background: #d33; color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 16px #0006; }
-  #statDot { width: 8px; height: 8px; border-radius: 50%; background: #888; display: inline-block; }
-  #statusSec { display: grid; gap: 8px; } #statusSec h2 { margin: 0; }
-  .srow { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; } .srow > span { color: var(--mut); }
-  #menuWrap { position: relative; } #menu { position: absolute; right: 0; top: 36px; z-index: 20; background: var(--card); border: 1px solid var(--bd); border-radius: 6px; padding: 4px; display: grid; gap: 4px; min-width: 150px; box-shadow: 0 4px 12px #0006; }
-  #menu button { text-align: left; border: 0; }
-  #menu button:hover, #menu button:focus-visible { background: var(--hov); }
-  #theme, #menuBtn, #sound { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
-  #tokbox { display: flex; flex-direction: column; align-items: stretch; gap: 3px; font-size: 11px; line-height: 1.1; text-align: center; }
-  #tokbar { width: 120px; height: 8px; border-radius: 4px; background: var(--bd); overflow: hidden; }
-  #tokfill { display: block; height: 100%; width: 0; background: #0b6; transition: width .5s, background .5s; }
-  main { max-width: 960px; margin: 16px auto; padding: 0 12px; display: grid; gap: 16px; }
-  section { background: var(--card); border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 2px #0004; }
-  h2 { margin: 0 0 10px; font-size: 15px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-  label { display: grid; gap: 3px; font-size: 12px; color: var(--mut); }
-  input, select, button { font: inherit; padding: 6px 8px; border: 1px solid var(--bd); border-radius: 5px; background: var(--in); color: var(--fg); }
-  button { cursor: pointer; }
-  button.primary { background: #0b6; color: #fff; border-color: #0b6; }
-  button.sell { background: #d33; border-color: #d33; color: #fff; }
-  button:disabled { opacity: .5; cursor: default; }
-  .seg { display: flex; } .seg button { border-radius: 0; flex: 1; } .seg button.on { background: var(--on); color: #fff; }
-  #side button.on[data-v="BUY"] { background: #0b6; border-color: #0b6; }
-  #side button.on[data-v="SELL"] { background: #d33; border-color: #d33; }
-  .copy svg, #logout svg { display: block; } .copy.done { color: #0b6; } code { word-break: break-all; }
-  .seg button:first-child { border-radius: 5px 0 0 5px; } .seg button:last-child { border-radius: 0 5px 5px 0; }
-  table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--bd); font-size: 13px; }
-  .msg { margin-top: 8px; padding: 8px; border-radius: 5px; display: none; white-space: pre-wrap; }
-  .msg.err { background: var(--errbg); display: block; } .msg.ok { background: var(--okbg); display: block; }
-  #results { position: absolute; background: var(--card); border: 1px solid var(--bd); border-radius: 5px; z-index: 5; max-height: 240px; overflow: auto; }
-  #results div { padding: 5px 8px; cursor: pointer; } #results div:hover { background: var(--hov); }
-  #login, #deleted { max-width: 300px; margin: 80px auto; }
-  #modal { position: fixed; inset: 0; background: #0008; display: none; align-items: center; justify-content: center; }
-  #jsonModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
-  .perf { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--bd); position: relative; }
-  .perf h3 { margin: 0 0 4px; font-size: 13px; } .perf .st { font-size: 12px; color: var(--mut); margin-bottom: 6px; } .perf .st b { color: var(--fg); }
-  .perf svg { width: 100%; height: auto; display: block; touch-action: none; } .perf text { fill: var(--mut); font-size: 10px; }
-  .perf .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--bd); border-radius: 5px; padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px #0005; display: none; }
-  #jsonModal > div { background: var(--card); padding: 18px; border-radius: 8px; width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
-  body:has(#jsonModal:not(.hidden)), body:has(#perfModal:not(.hidden)) { overflow: hidden; }
-  #addModal, #brokerModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
-  #addModal > div, #brokerModal > div { background: var(--card); padding: 18px; border-radius: 8px; width: min(560px, 94vw); max-height: 88vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
-  #brokerModal section { box-shadow: none; border: 1px solid var(--bd); }
-  body:has(#addModal:not(.hidden)), body:has(#brokerModal:not(.hidden)) { overflow: hidden; }
-  .round { width: 30px; height: 30px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
-  .ibtn { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
-  .req { color: #d33; margin-left: 2px; }
-  .brow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin: 4px 0; padding: 10px 12px; }
-  .brow .sp2 { flex: 1; }
-  .badge { font-size: 11px; font-weight: normal; padding: 1px 8px; border-radius: 10px; background: var(--bd); }
-  .badge.on { background: #0b6; color: #fff; }
-  #perfModal { position: fixed; inset: 0; background: #0008; display: flex; align-items: center; justify-content: center; z-index: 30; }
-  #perfModal > div { background: var(--card); padding: 18px; border-radius: 8px; width: min(640px, 94vw); max-height: 85vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
-  #jsonModal { overscroll-behavior: contain; }
-  #jsonPre { min-height: 0; overscroll-behavior: contain; margin: 0; overflow: auto; font-size: 12px; background: var(--in); border: 1px solid var(--bd); border-radius: 5px; padding: 10px; white-space: pre-wrap; word-break: break-all; }
-  #modal > div { background: var(--card); padding: 18px; border-radius: 8px; max-width: 420px; }
-  .refresh .ico { display: block; width: 14px; height: 14px; transform-origin: 50% 50%; } .refresh .ico svg { display: block; } .refresh { display: inline-flex; align-items: center; padding: 5px 7px; }
-  .plus { width: 28px; height: 28px; padding: 0; border-radius: 50%; background: transparent; line-height: 0; display: inline-flex; align-items: center; justify-content: center; } .plus svg { display: block; }
-  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 16px; }
-  .modal .box { background: var(--card); border: 1px solid var(--bd); border-radius: 8px; padding: 16px; width: 100%; max-width: 720px; margin: auto; }
-  .ibtn { padding: 3px 5px; margin-left: 4px; line-height: 0; } .ibtn svg { display: block; } .ibtn.del:hover { color: #d33; }
-  .racts { display: flex; justify-content: flex-end; white-space: nowrap; } tr.sel td { background: var(--in); }
-  .hbtns { display: inline-flex; align-items: center; gap: 6px; }
-  h2.hd { display: flex; align-items: center; justify-content: space-between; }
-  .sw { position: relative; display: inline-block; width: 38px; height: 22px; cursor: pointer; }
-  .sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; z-index: 1; }
-  .sw span { position: absolute; inset: 0; background: var(--bd); border-radius: 22px; transition: background .15s; }
-  .sw span::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; }
-  .sw input:checked + span { background: #0b6; } .sw input:checked + span::before { transform: translateX(16px); }
-  .sw input:focus-visible + span { outline: 2px solid var(--on); outline-offset: 2px; }
-  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
-  #brokerSave, #brokerVerify, #dtokSave, #dtokVerify { box-sizing: border-box; width: 96px; min-width: 96px; max-width: 96px; height: 32px; flex: none; text-align: center; white-space: nowrap; overflow: hidden; padding-left: 0; padding-right: 0; }
-  button.saved { opacity: .7; }
-  #brokerVerify.saved, #dtokVerify.saved { opacity: 1; background: #0b6; color: #fff; border-color: #0b6; } .refresh .ico.spin { animation: spin .3s linear; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ---- phones: single column, header on rows, tables as stacked cards ---- */
-  @media (max-width: 640px) {
-    body { font-size: 15px; }
-    main { margin: 10px auto; padding: 0 8px; gap: 12px; }
-    section { padding: 12px; }
-    header { flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
-    header > b { flex: 1 1 auto; white-space: nowrap; }
-    header .sp { display: none; }
-    .hmeta { display: flex; order: 3; flex: 1 1 100%; align-items: center; gap: 10px; min-width: 0; }
-    #bal { white-space: nowrap; font-size: 13px; }
-    #logDay { flex: 1; min-width: 0; }
-    #tokbar { flex: 1; width: auto; }
-    #menuWrap { order: 2; } #sound, #theme { order: 1; }
-    input, select { width: 100%; min-width: 0; box-sizing: border-box; font-size: 16px; }  /* 16px stops iOS zooming into fields */
-    input[type=checkbox], .sw input { width: 100%; }
-    button { min-height: 36px; }
-    .ibtn, .round, .plus, .refresh { min-height: 0; }
-    .grid { grid-template-columns: 1fr 1fr; }
-    .grid > label { align-content: start; }
-    .seg button { min-height: 36px; }
-    .actions button { min-width: 88px; }
-    #brokerSave, #brokerVerify, #dtokSave, #dtokVerify { height: 36px; }
-    /* tables: one card per row, each cell labelled with its column title */
-    table { display: block; }
-    tr:has(th) { display: none; }
-    tr { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; padding: 9px 0; border-bottom: 1px solid var(--bd); }
-    th, td { display: block; border: 0; padding: 0; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
-    td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--mut); }
-    td[data-label=""]::before { display: none; }
-    td[data-label=""], td:only-child, td[data-label="Info"], td[data-label="Scan"], td[data-label="Symbols"] { grid-column: 1 / -1; }
-    td[data-label]:empty { display: none; }
-    td button:not(.ibtn) { padding: 6px 14px; }
-    .racts { justify-content: flex-start; }
-    .racts .ibtn { width: 36px; height: 36px; margin: 0 8px 0 0; }
-    #hookTable tr.sel { background: var(--in); }
-    .modal { padding: 8px; }
-    .modal .box { padding: 12px; }
-    #jsonModal > div, #addModal > div, #brokerModal > div, #perfModal > div { padding: 12px; width: 96vw; }
+  /* Simple, flat, phone-only layout. Pure CSS: it only styles the markup and the classes the page script already sets. */
+  :root {
+    --jk:#79c0ff; --jstr:#7ee787; --jn:#ffa657; --jb:#d2a8ff;  /* JSON view: keys, strings, numbers, true/false/null */
+    --bg:#121212; --sf:#1e1e1e; --sf2:#2c2c2c; --bd:#3a3a3a; --fg:#e0e0e0; --mut:#9e9e9e; --in:#121212;  /* Material dark greys: no blue cast, so tints over them stay clean */
+    --acc:#8b6cf6; --s-ok:#15271a; --s-bad:#2c1717; --s-neu:#2e2410; --t-ok:rgba(63,185,80,.13); --t-bad:rgba(248,81,73,.13); --t-neu:rgba(227,179,65,.13); --b-ok:rgba(63,185,80,.5); --b-bad:rgba(248,81,73,.5); --b-neu:rgba(227,179,65,.5); --warn:#e3b341; --orn:#f0883e; --pos:#3fb950; --neg:#f85149; --pos-bg:rgba(63,185,80,.15); --neg-bg:rgba(248,81,73,.15);
+    --card:var(--sf); --s1:var(--acc); --r:12px;
+    color-scheme: dark;
   }
+  :root.light {
+    --jk:#0550ae; --jstr:#116329; --jn:#953800; --jb:#8250df;
+    --bg:#f6f8fa; --sf:#fff; --sf2:#eff2f5; --bd:#d0d7de; --fg:#1f2328; --mut:#656d76; --in:#fff;
+    --acc:#6a3fd6; --s-ok:#e4f3e8; --s-bad:#fce8e8; --s-neu:#fff1cc; --t-ok:rgba(26,127,55,.09); --t-bad:rgba(207,34,46,.08); --t-neu:rgba(191,135,0,.10); --b-ok:rgba(26,127,55,.45); --b-bad:rgba(207,34,46,.45); --b-neu:rgba(191,135,0,.45); --warn:#bf8700; --orn:#d4690a; --pos:#1a7f37; --neg:#cf222e; --pos-bg:rgba(26,127,55,.1); --neg-bg:rgba(207,34,46,.1);
+    color-scheme: light;
+  }
+
+  /* base */
+  html { background: var(--bg); }
+  body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0 auto; max-width: 430px; min-height: 100vh; background: var(--bg); color: var(--fg); }
   .hidden { display: none !important; }
+  h2 { margin: 0; font-size: 17px; }
+  h3 { margin: 0; font-size: 15px; }
+  code { font: 13px ui-monospace, Menlo, monospace; word-break: break-all; }
+  td, b { font-variant-numeric: tabular-nums; }
+  .hint { margin: 0; font-size: 13px; color: var(--mut); }
+
+  /* fields */
+  input, select, button { font: inherit; color: var(--fg); }
+  input, select { width: 100%; min-width: 0; box-sizing: border-box; height: 44px; padding: 0 12px; font-size: 16px; /* 16px stops iOS zoom */
+    background: var(--in); border: 1px solid var(--bd); border-radius: 8px; }
+  input:focus, select:focus { outline: 2px solid var(--acc); outline-offset: -1px; }
+  input[readonly] { background: var(--sf2); color: var(--mut); }
+  label { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; font-size: 13px; color: var(--mut); min-width: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+  .grid > .full, .grid > .grp { grid-column: 1 / -1; }
+  .grp { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--bd); font-size: 13px; font-weight: 600; color: var(--fg); }
+  .grp:first-child { margin: 0; padding: 0; border: 0; }
+  .req { color: var(--neg); margin-left: 2px; }
+
+  /* buttons */
+  button { min-height: 44px; padding: 0 16px; border: 1px solid var(--bd); border-radius: 8px; background: var(--sf2); font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+  button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  button.sell, #confirm.sell { background: var(--neg); border-color: var(--neg); color: #fff; }
+  #confirm.primary, #confirm.buy { background: var(--pos); border-color: var(--pos); }
+  button.danger { color: var(--neg); }
+  button.saved, button.primary.saved { background: var(--pos-bg); border-color: transparent; color: var(--pos); }
+  @media (hover: hover) {  /* mouse only: touch screens have no hover, and it would stick after a tap */
+    button:not(:disabled):not(.primary):not(.sell):not(.on):not(.saved):hover { background: var(--bd); }
+    button.primary:not(:disabled):hover, button.sell:not(:disabled):hover, button.on:not(:disabled):hover, button.saved:not(:disabled):hover { filter: brightness(1.15); }
+    #brokerLogin:not(:disabled):hover, #review:not(:disabled):hover { background: var(--warn); color: #000; }
+    #tabs button:not(:disabled):hover { background: var(--sf2); }
+  }
+  td > button { min-height: 36px; padding: 0 14px !important; font-size: 13px; text-transform: capitalize; }
+  .hb, .refresh, .plus, .round, .ibtn, .copy { min-height: 0; width: 36px; height: 36px; padding: 0; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+  .hb, .copy { border-color: transparent; background: transparent; }
+  .refresh, .plus, .round { border-radius: 50%; }
+  .copy { width: 32px; height: 32px; color: var(--mut); } .copy.done { color: var(--pos); }
+  .ibtn.del { color: var(--neg); }
+  header .hb svg { width: 20px; height: 20px; }
+  #theme { font-size: 18px; line-height: 1; }
+  #theme svg { width: 14px; height: 14px; }  /* beats "header .hb svg" (20px), so the moon matches the sun character */
+  .hb svg, .refresh svg, .plus svg, .round svg, .ibtn svg, .copy svg { display: block; }
+  .refresh .ico { display: block; } .refresh .ico.spin { animation: spin .3s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+
+  /* segmented control, switch, badges, messages */
+  .seg { display: flex; } .seg button { flex: 1; padding: 0; border-radius: 0; }
+  .seg button:first-child { border-radius: 8px 0 0 8px; } .seg button:last-child { border-radius: 0 8px 8px 0; border-left: 0; }
+  .seg button.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+  #side button.on[data-v="BUY"] { background: var(--pos); border-color: var(--pos); }
+  #side button.on[data-v="SELL"] { background: var(--neg); border-color: var(--neg); }
+  .sw { position: relative; display: inline-block; width: 44px; height: 26px; flex: none; }
+  .sw input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; z-index: 1; }
+  .sw span { position: absolute; inset: 0; background: var(--bd); border-radius: 13px; }
+  .sw span::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; }
+  .sw input:checked + span { background: var(--pos); } .sw input:checked + span::before { transform: translateX(18px); }
+  .sw input:focus-visible + span { outline: 2px solid var(--acc); outline-offset: 2px; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--sf2); color: var(--mut); }
+  .badge.on { background: var(--pos-bg); color: var(--pos); }
+  .msg { display: none; padding: 10px 12px; border-radius: 8px; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+  .msg.ok { display: block; background: var(--pos-bg); color: var(--pos); }
+  .msg.err { display: block; background: var(--neg-bg); color: var(--neg); }
+  #toast { position: fixed; top: 12px; left: 12px; right: 12px; z-index: 1000; max-width: 406px; margin: 0 auto; box-sizing: border-box; padding: 12px 14px; border-radius: 8px; background: var(--neg); color: #fff; font-size: 14px; }
+
+  /* shell: header, pages, bottom tabs */
+  #app { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+  header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 2px; padding: 8px 8px 8px 16px; background: var(--sf); border-bottom: 1px solid var(--bd); }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+  header .sp { flex: 1; }
+  #menuWrap { position: relative; }
+  #menu { position: absolute; right: 0; top: 42px; z-index: 20; min-width: 180px; padding: 4px; display: grid; background: var(--sf); border: 1px solid var(--bd); border-radius: 8px; }
+  #menu button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; font-weight: 500; }
+  #menu button svg { color: var(--mut); }
+  #menu button:hover { background: var(--sf2); }
+  #menu #logout, #menu #logout svg { color: var(--neg); }
+  #menu hr { border: 0; border-top: 1px solid var(--bd); margin: 4px 0; }
+  main { flex: 1; display: grid; gap: 14px; align-content: start; padding: 16px; box-sizing: border-box; width: 100%; }
+  #mainView > section[data-pg] { display: none; }
+  #mainView[data-p="home"] > [data-pg~="home"], #mainView[data-p="alerts"] > [data-pg~="alerts"], #mainView[data-p="logs"] > [data-pg~="logs"],
+  #mainView[data-p="positions"] > [data-pg~="positions"], #mainView[data-p="orders"] > [data-pg~="orders"], #mainView[data-p="place"] > [data-pg~="place"],
+  #mainView[data-p="hooks"] > [data-pg~="hooks"], #mainView[data-p="config"] > [data-pg="config"], #mainView[data-p="brokers"] > [data-pg="brokers"] { display: grid; gap: 14px; }
+  #accountView > section { display: grid; gap: 12px; }
+  main h2 { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 22px; }
+  main h2 .ttl { flex: 1; min-width: 0; }
+  main h2 small { display: block; font-size: 13px; font-weight: 400; color: var(--mut); }
+  main h2 .hbtns { display: inline-flex; gap: 8px; }
+  h2 select { width: auto; height: 36px; font-size: 14px; }
+  #logDay:focus, #logDay:focus-visible { outline: none; }  /* the date switcher has no accent focus ring */
+  .back { margin-left: -8px; }
+  .card, #accountView > section:not(:first-child) { background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); padding: 16px; }
+  #tabs { position: sticky; bottom: 0; z-index: 10; display: flex; padding: 4px 0 env(safe-area-inset-bottom); background: var(--sf); border-top: 1px solid var(--bd); }
+  #tabs button { flex: 1; min-width: 0; min-height: 52px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 0; border-radius: 0; background: none; font-size: 11px; font-weight: 500; color: var(--mut); }
+  #tabs button.on { color: var(--acc); font-weight: 600; }
+  #tabs button { position: relative; }
+  .dot { position: absolute; top: 2px; left: calc(50% + 2px); box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 3px; border: 2px solid var(--sf); border-radius: 9px;
+    background: var(--neg); color: #fff; font: 700 10px/14px system-ui, sans-serif; font-style: normal; text-align: center; }
+
+  /* home */
+  .hero { background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); padding: 16px; }
+  .hero .lbl { font-size: 13px; color: var(--mut); }
+  .hero #bal { display: block; margin-top: 2px; font-size: 30px; font-weight: 700; overflow-wrap: anywhere; }
+  .list { padding: 0 16px !important; }
+  #limCards { display: contents; }  /* one card per webhook, placed straight into Home's grid */
+  .limCard { display: grid; gap: 14px; }
+  .limCard h3 { margin: 0; font-size: 13px; color: var(--mut); font-weight: 600; }
+  .limCard .stepRow { margin-bottom: 6px; } .limCard .stepRow .nm { font-size: 14px; font-weight: 600; }
+  .limCard .lbar i { transition: width .25s; }
+  /* an empty bar (nothing left, or no valid token) fades in and out in red to catch the eye */
+  @keyframes emptyBlink { 0%, 100% { background: var(--sf2); } 50% { background: var(--neg); } }
+  .lbar.empty, #tokbar.empty { animation: emptyBlink 1.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .lbar.empty, #tokbar.empty { animation: none; background: var(--neg); } }
+  .limCard .lbar { display: block; height: 6px; border-radius: 3px; background: var(--sf2); overflow: hidden; }
+  .limCard .lbar i { display: block; height: 100%; background: var(--pos); }
+  .limCard .lbar i.warn { background: var(--warn); } .limCard .lbar i.bad { background: var(--neg); }
+  .stepRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .stepper { display: flex; align-items: center; gap: 10px; } .stepper .stepVal { min-width: 76px; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .stepper button { width: 36px; height: 36px; min-height: 0; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+  #notices { display: grid; gap: 0; }
+  #notices .note { padding: 12px 0; font-size: 14px; border-bottom: 1px solid var(--bd); box-shadow: inset 4px 0 0 var(--warn); padding-left: 12px; margin-left: -16px; padding-right: 16px; margin-right: -16px; }
+  #notices .note.bad { box-shadow: inset 4px 0 0 var(--neg); }
+  #notices .note:last-child { border-bottom: 0; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tile.net { grid-column: 1 / -1; }
+  .tile.net b { font-size: 26px; }
+  .tile span { font-size: 13px; color: var(--mut); }
+  .tile b { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; border-bottom: 1px solid var(--bd); }
+  #brokerLogin { width: 100%; margin: 12px 0 0; }
+  #brokerLogin, #review { background: transparent; border-color: var(--warn); color: var(--warn); font-weight: 600; }  /* the amber outline button style */
+  .srow:has(+ #tokbox) { border-bottom: 0; }
+  .srow:last-child { border-bottom: 0; }
+  #accountView .srow { border-bottom: 0; min-height: 36px; }
+  .srow > span { color: var(--mut); }
+  .srow > b { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  #statDot { width: 8px; height: 8px; border-radius: 50%; background: var(--mut); display: inline-block; flex: none; }
+  #tokbox { display: grid; gap: 6px; font-size: 13px; color: var(--mut); }
+  #tokbox .trow { display: flex; justify-content: space-between; gap: 8px; } #tokbox .trow b { font-weight: 600; color: var(--fg); }
+  #tokbar { display: block; height: 6px; border-radius: 3px; background: var(--sf2); overflow: hidden; }
+  #tokfill { display: block; height: 100%; width: 0; transition: width .5s; }
+
+  /* lists: each table row is a card; cells show their column name above the value */
+  table { display: block; width: 100%; scroll-margin-top: 100vh; }  /* opening /#orders or /#positions must not jump to the table of that name */
+  table > tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; margin-bottom: 10px; padding: 14px;
+    background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); }
+  tr:has(th) { display: none !important; }
+  td { display: block; min-width: 0; padding: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 500; }
+  td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 12px; font-weight: 400; color: var(--mut); }
+  td[data-label=""]::before { display: none; }
+  td[data-label]:empty { display: none; }
+  table > tr:has(td:only-child) { display: block; padding: 24px 16px; text-align: center; color: var(--mut); background: transparent; border-style: dashed; }
+  /* empty states: one dashed box everywhere */
+  #hookTable:not(:empty):not(:has(tr)), #brokerList:not(:empty):not(:has(.brow)), #positions:has(tr):not(:has(td))::after, #orders:has(tr):not(:has(td))::after {
+    content: "Nothing here today."; display: block; box-sizing: border-box; padding: 24px 16px; text-align: center; color: var(--mut); border: 1px dashed var(--bd); border-radius: var(--r); }
+  /* every card reads the same way: row 1 = title (left) and time or state (right), both without a label;
+     then the labelled fields; the card's button, if any, sits bottom right */
+  #alertsTbl td[data-label="Webhook"], #autoLog td[data-label="Info"], #positions td[data-label="Symbol"], #orders td[data-label="Symbol"], #hookTable td[data-label="Name"] { grid-column: 1 / 3; grid-row: 1; font-size: 16px; font-weight: 600; }
+  #alertsTbl td[data-label="Time"], #autoLog td[data-label="Time"], #orders td[data-label="Time"], #positions td[data-label="P&L %"], #hookTable td[data-label="Status"] { grid-column: 3; grid-row: 1; justify-self: end; align-self: center; text-align: right; white-space: nowrap; }
+  #alertsTbl td[data-label="Webhook"]::before, #autoLog td[data-label="Info"]::before, #positions td[data-label="Symbol"]::before, #orders td[data-label="Symbol"]::before, #hookTable td[data-label="Name"]::before,
+  #alertsTbl td[data-label="Time"]::before, #autoLog td[data-label="Time"]::before, #orders td[data-label="Time"]::before, #positions td[data-label="P&L %"]::before, #hookTable td[data-label="Status"]::before,
+  td[data-label]:has(> button)::before { display: none; }
+  #alertsTbl td[data-label="Time"], #autoLog td[data-label="Time"], #orders td[data-label="Time"] { font-size: 13px; font-weight: 400; color: var(--mut); }
+  #positions td[data-label="P&L %"] { font-size: 16px; font-weight: 600; }
+  #hookTable td[data-s="ok"] { background: var(--pos-bg) !important; color: var(--pos) !important; }
+  #hookTable td[data-s="bad"] { background: var(--neg-bg) !important; color: var(--neg) !important; }
+  #hookTable td[data-s="warn"] { background: rgba(227,179,65,.16) !important; color: var(--warn) !important; }
+  #hookTable td[data-label="Status"] { padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; background: var(--sf2); color: var(--mut); }
+  td:has(> button) { grid-column: 3; justify-self: end; align-self: end; }
+  #alertsTbl td[data-label="Symbols"] { grid-column: 1 / -1; grid-row: 2; }
+  #alertsTbl td[data-label="Scan"], #autoLog td[data-label="Scan"] { grid-column: 1 / 3; grid-row: 3; }
+  #alertsTbl td[data-label="JSON"], #autoLog td[data-label="Details"] { grid-row: 3; }
+  #autoLog td[data-label="Mode"] { text-transform: uppercase; } #autoLog td[data-label="Mode"]::before { text-transform: none; }
+  #orders td[data-label="Status"] { grid-column: 2 / -1; }
+  #orders td[data-label=""] { grid-column: 1 / -1; }
+  #hookTable td[data-label=""] { grid-column: 1 / -1; padding-top: 12px; border-top: 1px solid var(--bd); }
+  /* colours the page script sets inline (#0b6 / #d33) follow the theme's green and red */
+  td[style*="rgb(0, 187, 102)"] { color: var(--pos) !important; } td[style*="rgb(221, 51, 51)"] { color: var(--neg) !important; }
+  #tokfill[style*="rgb(0, 187, 102)"], #statDot[style*="rgb(0, 187, 102)"] { background: var(--pos) !important; }
+  #tokfill[style*="rgb(221, 51, 51)"], #statDot[style*="rgb(221, 51, 51)"] { background: var(--neg) !important; }
+  #hookTable tr.sel { border-color: var(--acc); }
+  .racts { display: flex; gap: 8px; }
+  .racts .ibtn { flex: 1; width: auto; height: 40px; }
+  .racts .copy { color: var(--fg); background: var(--sf2); border-color: var(--bd); }
+  .racts .copy.done { color: var(--pos); }  /* copied: the tick turns green (beats the rule above) */
+  #hookEdit .sheet { background: var(--sf); }  /* the grey card colour, like the main pages' cards, so the inputs (--in) sit inset instead of blending into a near-black sheet */
+  .racts svg, .brow .ibtn svg { width: 16px; height: 16px; }
+  #positions td[data-label="Product"] { grid-column: 1; }  /* stays on row 2 even when P&L % is blank */
+
+  /* place order */
+  #results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5; max-height: 280px; overflow: auto; background: var(--sf); border: 1px solid var(--bd); border-radius: 8px; }
+  #results div { padding: 12px; color: var(--fg); font-size: 14px; cursor: pointer; border-bottom: 1px solid var(--bd); }
+  #results div:last-child { border-bottom: 0; }
+  #results div:hover { background: var(--sf2); }
+  details.hint summary { cursor: pointer; font-weight: 600; }
+  details.hint p { margin: 8px 0 0; }
+
+  /* brokers */
+  .brow { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; min-height: 60px; margin: 0 0 10px; padding: 10px 10px 10px 16px; text-align: left;
+    background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); font-size: 15px; }
+  .brow .sp2 { flex: 1; }
+
+  /* dialogs: sheets anchored to the bottom of the screen */
+  .ovl { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.5); overscroll-behavior: contain; }
+  #modal { display: none; }
+  .sheet { width: 100%; max-width: 430px; max-height: 90%; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--bd); border-radius: 16px 16px 0 0; }
+  .sheet > h2, .sheet h2.hd { display: flex; align-items: center; gap: 8px; font-size: 19px; }
+  .sheet section, #cfgBox { display: grid; gap: 12px; padding: 16px; background: var(--sf); border: 1px solid var(--bd); border-radius: var(--r); }
+  .sheet section h2 { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+  .sheet .brow { background: var(--sf); }
+  #summary, #jsonPre { background: var(--sf); }
+  body:has(.ovl:not(.hidden):not(#modal)) { overflow: hidden; }
+  #summary, #jsonPre { margin: 0; padding: 12px; border-radius: 8px; background: var(--sf); border: 1px solid var(--bd); font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+  #jsonPre .k { color: var(--jk); } #jsonPre .s { color: var(--jstr); } #jsonPre .n { color: var(--jn); } #jsonPre .b { color: var(--jb); }
+  #jsonPre { flex: 1; min-height: 0; overflow: auto; font-size: 12px; }
+  /* the JSON window: centred, a fixed height, the text scrolls inside it */
+  #jsonModal { align-items: center; padding: 16px; box-sizing: border-box; }
+  #jsonModal .sheet { height: min(480px, 80%); max-height: none; border: 1px solid var(--bd); border-radius: 16px; padding-bottom: 16px; overflow: hidden; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; background: var(--sf2); border: 1px solid var(--bd); font-size: 13px; font-weight: 600; }
+  .chip i { font-style: normal; font-weight: 400; color: var(--mut); }
+  .urlrow { display: flex; align-items: center; gap: 6px; padding: 8px 4px 8px 12px; border-radius: 8px; background: var(--sf2); font-size: 12px; color: var(--mut); }
+  .urlrow > span { flex: 1; min-width: 0; }
+  .urlrow code { display: block; margin-top: 2px; color: var(--fg); font-size: 12px; }
+  /* a log entry that just arrived: coloured outline that fades in and out once a second for 5 seconds (green done, red failed, yellow nothing to do) */
+  @keyframes hl { 0%, 100% { outline-color: transparent; } 50% { outline-color: var(--hl); } }
+  tr.hl { outline: 2px solid transparent; outline-offset: -1px; animation: hl 1s ease-in-out 5; }
+  /* alert and log cards: a neutral card with a solid outcome-coloured left stripe (no tint, so yellow stays clean) (green done, red failed, yellow nothing to do) */
+  tr.o-ok { box-shadow: inset 4px 0 0 var(--pos); }
+  tr.o-bad { box-shadow: inset 4px 0 0 var(--neg); }
+  tr.o-neu { box-shadow: inset 4px 0 0 var(--warn); }
+  tr.hl-ok { --hl: var(--pos); } tr.hl-bad { --hl: var(--neg); } tr.hl-neu { --hl: var(--warn); }
+  .perf { position: relative; }
+  .perf .st { margin-bottom: 10px; font-size: 13px; color: var(--mut); } .perf .st b { color: var(--fg); }
+  .perf svg { display: block; width: 100%; height: auto; touch-action: none; } .perf text { fill: var(--mut); font-size: 13px; }
+  .perf .tip { position: absolute; display: none; pointer-events: none; white-space: nowrap; padding: 4px 8px; border-radius: 6px; font-size: 12px; background: var(--fg); color: var(--bg); }
+
+  /* login, lock-out and account-deleted screens */
+  #login, #lockPage, #deleted { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px 20px; box-sizing: border-box; }
+  #login > form, #lockPage > section, #deleted > section { width: 100%; max-width: 360px; display: grid; gap: 16px; }
+  #login { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 0; }
+  #login .login-bar { display: flex; align-items: center; padding: 14px 20px; background: var(--sf); border-bottom: 1px solid var(--bd); }
+  #login .brand-mark { display: flex; align-items: center; gap: 10px; }
+  #login .logo-tile { display: grid; place-items: center; width: 24px; height: 24px; }
+  #login .logo-tile svg { display: block; width: 22px; height: 22px; }
+  #login .brand-name { font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: .3px; color: var(--fg); }
+  #login > form { width: 100%; max-width: 360px; margin: auto; padding: 0 20px 24px; box-sizing: border-box; display: grid; gap: 18px; }
+  #login .head { display: grid; gap: 6px; text-align: left; }
+  #login .head h2 { margin-top: 0; font-size: 22px; }
+  #login .head .hint { font-size: 14px; line-height: 20px; }
+  #login .field { display: grid; gap: 6px; }
+  #login .pwf { position: relative; display: block; }
+  #login .pwf input { padding-right: 64px; }  /* room for the Show button */
+  #pwShow { position: absolute; top: 0; right: 0; height: 44px; width: 44px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; background: transparent; color: var(--mut); }
+  #pwShow svg { display: block; width: 20px; height: 20px; }
+  #pwShow:hover { background: transparent; color: var(--fg); }
+  #login input[aria-invalid="true"] { border-color: var(--neg); }
+  #capsMsg { color: var(--warn); }
+  #login h2, #deleted h2, #lockPage h2 { font-size: 24px; }
+  #login p, #deleted p, #lockPage p { margin: 0; }
+  #lockPage { text-align: center; }
+  #lockPage.err h2, #lockPage.err #lockTime { color: var(--neg); } #lockPage.ok h2 { color: var(--pos); }
+  #lockTime { font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #lockTime:empty { display: none; }
+
+  /* desktop: show the app as a phone-sized screen (390x844 max) that scrolls inside */
+  @media (min-width: 431px) {
+    html { height: 100%; overflow: hidden; background: #3a3a3a; }  /* dark grey around the phone frame, in both themes */
+    body { width: 390px; height: min(844px, calc(100vh - 24px)); min-height: 0; margin: 12px auto; overflow-y: auto; box-sizing: border-box; border: 1px solid var(--bd); border-radius: 16px; scrollbar-width: none; }
+    body::-webkit-scrollbar { display: none; }  /* phones don't show one either */
+    #app, #login, #lockPage, #deleted { min-height: 100%; }
+    body:has(.ovl:not(.hidden):not(#modal)) { overflow-y: hidden; }
+    .ovl { box-sizing: border-box; padding: 12px 0 calc(100vh - 12px - min(844px, 100vh - 24px)); }
+    .sheet { max-width: 390px; max-height: 92%; border: 1px solid var(--bd); border-radius: 16px; scrollbar-width: thin; scrollbar-color: var(--bd) transparent; }
+    #toast { top: 24px; max-width: 366px; }
+  }
 </style>
 </head>
 <body>
 <div id="deleted" class="hidden"><section>
   <h2>Account deleted</h2>
-  <p>Your account was successfully deleted. All of its data has been erased from this server.</p>
-  <p><button class="primary" id="newAcct">Create a new account</button></p>
+  <p class="hint">Your account was successfully deleted. All of its data has been erased from this server.</p>
+  <button class="primary" id="newAcct">Create a new account</button>
 </section></div>
 <div id="lockPage" class="hidden" role="alert"><section>
   <h2 id="lockTitle"></h2>
   <div id="lockTime"></div>
   <p id="lockMsg"></p>
-  <p id="lockWarn" style="font-size:13px;color:var(--mut)">If this wasn't you, someone may be trying to break into your account: change your password after you log in.</p>
-  <p><button class="primary hidden" id="lockContinue">Continue to login</button></p>
+  <p id="lockWarn" class="hint">If this wasn't you, someone may be trying to break into your account: change your password after you log in.</p>
+  <button class="primary hidden" id="lockContinue">Continue to login</button>
 </section></div>
-<div id="login" class="hidden"><section>
-  <h2 id="loginTitle">Login</h2>
-  <label>Password <input id="pw" type="password" autocomplete="current-password"></label>
-  <label id="pw2Box" class="hidden">Repeat password <input id="pw2" type="password" autocomplete="new-password"></label>
-  <p><button class="primary" id="loginBtn">Log in</button></p>
-  <div class="msg" id="loginMsg"></div>
-</section></div>
+<div id="login" class="hidden"><div class="login-bar"><div class="brand-mark"><span class="logo-tile"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg></span><span class="brand-name">Flash</span></div></div><form id="loginForm" novalidate>
+  <div class="head">
+    <h2 id="loginTitle">Log in</h2>
+    <p class="hint" id="loginSub">Enter your password to open the dashboard.</p>
+  </div>
+  <input type="text" name="username" autocomplete="username" value="flash" class="hidden" tabindex="-1" aria-hidden="true">  <!-- one account, no user name: this only gives password managers something to file the password under -->
+  <div class="field">
+    <label for="pw">Password</label>
+    <span class="pwf"><input id="pw" name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required aria-describedby="pwHint loginMsg"><button type="button" id="pwShow" aria-pressed="false" aria-label="Show password" title="Show password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="hidden"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-7 0-11-7-11-7a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg></button></span>
+    <p class="hint hidden" id="pwHint">At least 8 characters.</p>
+  </div>
+  <div class="field hidden" id="pw2Box">
+    <label for="pw2">Repeat password</label>
+    <input id="pw2" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="loginMsg">
+  </div>
+  <p class="hint hidden" id="capsMsg">Caps Lock is on.</p>
+  <div class="msg" id="loginMsg" role="alert"></div>
+  <button class="primary" id="loginBtn" type="submit" style="min-height:46px">Log in</button>
+</form></div>
 
 <div id="toast" class="hidden" role="alert"></div>
 <div id="app" class="hidden">
 <header>
-  <b><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>{{APP_NAME}}</b><span class="hmeta"><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select></span><span class="sp"></span>
-  <button id="sound" title="Test alert sound" aria-label="Test alert sound"></button>
-  <button id="theme" title="Toggle theme" aria-label="Toggle theme"></button>
-<div id="menuWrap"><button id="menuBtn" title="Account" aria-label="Account" aria-haspopup="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden"><button id="logout" >Log out</button><button id="accountBtn">Account</button></div></div>
+  <b class="brand"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFC107" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.5h-6.6z"/></svg>Flash</b><span class="sp"></span>
+  <button id="sound" class="hb" title="Mute alert sound" aria-label="Mute alert sound" aria-pressed="false"></button>
+  <button id="theme" class="hb" title="Toggle theme" aria-label="Toggle theme"></button>
+  <div id="menuWrap"><button id="menuBtn" class="hb" title="Menu" aria-label="Menu" aria-haspopup="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></button><div id="menu" class="hidden">
+    <button data-pg-go="config"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--sf)"/><circle cx="15" cy="12" r="2" fill="var(--sf)"/><circle cx="8" cy="18" r="2" fill="var(--sf)"/></svg>Settings</button>
+    <button data-pg-go="brokers"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10M19 21V10M9 21v-7M15 21v-7M2 10l10-6 10 6"/></svg>Brokers</button>
+    <button id="accountBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Account</button>
+    <hr>
+    <button id="logout"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></div></div>
 </header>
-<main id="mainView">
-  <section id="statusSec">
-    <h2>Status <button id="rs" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
-    <div class="srow"><span>Broker</span><b><i id="statDot"></i> <span id="statBroker">-</span></b></div>
-    <div class="srow"><span>Login</span><b id="statLogin">-</b></div>
-    <div id="tokbox" title="Login token expiry"><span id="tokbar"><i id="tokfill"></i></span><span id="toktxt"></span></div>
-    <div class="srow"><span>Balance</span><b id="bal">-</b></div>
-    <div class="actions"><button id="brokerLogin">Log in to broker</button></div>
+<main id="mainView" data-p="home">
+  <section data-pg="home" id="statusSec">
+    <h2><span class="ttl">Overview</span> <button id="rs" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+    <div class="hero">
+      <span class="lbl">Available balance</span>
+      <b id="bal">-</b>
+    </div>
+    <div class="tiles" id="todayTiles">
+      <div class="tile net"><span>Net P&amp;L today</span><b id="tNet">-</b></div>
+      <div class="tile"><span>Alerts today</span><b id="tAlerts">-</b></div>
+      <div class="tile"><span>Orders today</span><b id="tOrders">-</b></div>
+      <div class="tile"><span>Profit</span><b id="tProfit" style="color:var(--pos)">-</b></div>
+      <div class="tile"><span>Loss</span><b id="tLoss" style="color:var(--neg)">-</b></div>
+    </div>
+    <div class="card" id="tokCard">
+      <div id="brokerInfo">
+        <div class="hidden"><i id="statDot"></i><span id="statBroker"></span><b id="statLogin"></b></div>  <!-- still updated by the script, not shown -->
+        <div id="tokbox" title="Login token expiry">
+          <div class="trow"><span>Broker token expiry</span><b id="toktxt">&nbsp;</b></div>
+          <span id="tokbar"><i id="tokfill"></i></span>
+        </div>
+        <button id="brokerLogin" class="hidden">Renew token</button>
+        <div class="msg" id="limMsg"></div>
+      </div>
+    </div>
+    <div id="limCards"></div>
+    <div class="card list hidden" id="notices"></div>
   </section>
-  <section>
-    <h2>Webhook alerts <button id="ral" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+  <section data-pg="alerts">
+    <h2><span class="ttl">Alerts</span> <span id="daySlot_alerts"><select id="logDay" aria-label="Date for alerts and logs" title="Date for alerts and logs"></select></span> <button id="ral" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
     <table id="alertsTbl"></table>
   </section>
 
-  <section>
-    <h2>Logs <button id="rl" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
+  <section data-pg="logs">
+    <h2><span class="ttl">Logs</span> <span id="daySlot_logs"></span> <button id="rl" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
     <table id="autoLog"></table>
   </section>
 
-  <section><h2>Positions <button id="rp" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="positions"></table></section>
-  <section><h2>Today's orders <button id="ro" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="orders"></table><div class="msg" id="ordersMsg"></div></section>
-  <section>
-    <h2 class="hd">Webhook automation (Chartink) <span class="hbtns"><button id="hookDefaults" class="plus" title="Defaults for new webhooks" aria-label="Defaults for new webhooks"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--card)"/><circle cx="15" cy="12" r="2" fill="var(--card)"/><circle cx="8" cy="18" r="2" fill="var(--card)"/></svg></button> <button id="hookNew" class="plus" title="New webhook" aria-label="New webhook"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></span></h2>
+  <section data-pg="positions"><h2><span class="ttl">Positions</span> <button id="rp" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="positions"></table><div class="msg" id="positionsMsg"></div></section>
+  <section data-pg="orders"><h2><span class="ttl">Orders</span> <button id="ro" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2><table id="orders"></table><div class="msg" id="ordersMsg"></div></section>
+  <section data-pg="hooks">
+    <h2 class="hd"><span class="ttl">Webhooks</span> <span class="hbtns"><button id="rh" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button> <button id="hookDefaults" class="plus" title="Defaults for new webhooks" aria-label="Defaults for new webhooks"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--sf2)"/><circle cx="15" cy="12" r="2" fill="var(--sf2)"/><circle cx="8" cy="18" r="2" fill="var(--sf2)"/></svg></button> <button id="hookNew" class="plus primary" title="New webhook" aria-label="New webhook"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></span></h2>
     <table id="hookTable"></table>
     <div class="msg" id="hookMsg"></div>
-    <div id="hookEdit" class="modal hidden"><div class="box" role="dialog" aria-modal="true" aria-labelledby="hookTitle">
-    <h3 id="hookTitle" style="font-size:14px;margin:14px 0 6px"></h3>
-    <p id="hookUrlRow" style="font-size:12px;color:var(--mut)">Webhook URL (keep secret): <code id="hook"></code> <button class="copy" data-src="hook" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <div id="hookEdit" class="ovl hidden"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="hookTitle">
+    <h2 id="hookTitle"></h2>
+    <div id="hookUrlRow" class="urlrow"><span>Webhook URL (keep secret)<code id="hook"></code></span> <button class="copy" data-src="hook" title="Copy" aria-label="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
     <div class="grid">
-      <label><span>Name<span class="req">*</span></span> <input id="a_name" autocomplete="off"></label>
+      <div class="grp">Basics</div>
+      <label class="full"><span>Name<span class="req">*</span></span> <input id="a_name" autocomplete="off"></label>
       <label><span>Automation<span class="req">*</span></span> <select id="a_enabled"><option value="false">Off</option><option value="true">On</option></select></label>
-      <label><span>Mode<span class="req">*</span></span> <select id="a_mode"><option value="dry">DEMO (log only)</option><option value="live">LIVE (real orders)</option></select></label>
       <label><span>Side<span class="req">*</span></span> <select id="a_side"><option>BUY</option><option>SELL</option></select></label>
+      <label class="full"><span>Mode<span class="req">*</span></span> <select id="a_mode"><option value="dry">DEMO (log only)</option><option value="live">LIVE (real orders)</option></select></label>
       <label><span>Product<span class="req">*</span></span> <select id="a_product"><option>INTRADAY</option><option>CNC</option><option>MARGIN</option><option>MTF</option></select></label>
-      <label><span>Order method<span class="req">*</span></span> <select id="a_order_method"><option value="market">Market (cancel at timeout, no retry)</option><option value="market_resend">Market + cancel &amp; retry (up to 5 times)</option><option value="limit">Limit with buffer (one attempt, cancel at timeout)</option></select></label>
       <label id="lbl_limit_buffer"><span>Limit buffer %<span class="req">*</span></span> <input id="a_limit_buffer" inputmode="decimal" placeholder="0.3"></label>
+      <label class="full"><span>Order method<span class="req">*</span></span> <select id="a_order_method"><option value="market">Market (cancel at timeout, no retry)</option><option value="market_resend">Market + cancel &amp; retry (up to 5 times)</option><option value="limit">Limit with buffer (one attempt, cancel at timeout)</option></select></label>
+      <div class="grp">Sizing</div>
       <label><span>Stocks per alert<span class="req">*</span></span> <input id="a_stocks_per_alert" inputmode="numeric"></label>
       <label><span>Max open positions<span class="req">*</span></span> <input id="a_max_positions" inputmode="numeric"></label>
       <label><span>Max trades / day<span class="req">*</span></span> <input id="a_max_daily_trades" inputmode="numeric"></label>
-      <label><span>Capital per stock (₹)<span class="req">*</span></span> <input id="a_capital_per_stock" inputmode="decimal"></label>
+      <label>Max qty / order (optional) <input id="a_max_qty" inputmode="numeric"></label>
+      <label><span>Capital / stock (₹)<span class="req">*</span></span> <input id="a_capital_per_stock" inputmode="decimal"></label>
       <label><span>Max capital / day (₹)<span class="req">*</span></span> <input id="a_max_daily_capital" inputmode="decimal"></label>
-      <label>Max qty per order (optional) <input id="a_max_qty" inputmode="numeric"></label>
+      <div class="grp">Risk</div>
       <label><span>TP % (0 = none)<span class="req">*</span></span> <input id="a_tp_pct" inputmode="decimal"></label>
       <label><span>SL % (0 = none)<span class="req">*</span></span> <input id="a_sl_pct" inputmode="decimal"></label>
       <label><span>Max daily loss (₹)<span class="req">*</span></span> <input id="a_max_daily_loss" inputmode="decimal"></label>
-      <label><span>Cooldown per symbol (min)<span class="req">*</span></span> <input id="a_cooldown_minutes" inputmode="numeric"></label>
-      <label><span>Window start (IST)<span class="req">*</span></span> <input id="a_window_start" placeholder="09:20"></label>
-      <label><span>Window end (IST)<span class="req">*</span></span> <input id="a_window_end" placeholder="15:10"></label>
-      <label><span>Exit time (IST)<span class="req">*</span></span> <input id="a_exit_time" placeholder="15:15"></label>
+      <label><span>Cooldown / symbol (min)<span class="req">*</span></span> <input id="a_cooldown_minutes" inputmode="numeric"></label>
+      <div class="grp">Timing (IST)</div>
+      <label><span>Window start<span class="req">*</span></span> <input id="a_window_start" placeholder="09:20"></label>
+      <label><span>Window end<span class="req">*</span></span> <input id="a_window_end" placeholder="15:10"></label>
+      <label><span>Exit time<span class="req">*</span></span> <input id="a_exit_time" placeholder="15:15"></label>
       <label id="lbl_exit_timeout"><span>Timeout (sec<span id="req_timeout" class="req">*</span><span id="opt_timeout">, optional</span>) </span><input id="a_exit_timeout" inputmode="numeric" placeholder="60"></label>
     </div>
-    <p style="font-size:12px;color:var(--mut)">LIVE also needs the master Trading switch above set to Enabled. At the exit time the automation cancels its leftover TP/SL orders and squares off the positions it opened (entries stop at that time; it works even if automation is switched off). Today: <span id="a_today"></span></p>
-    <div class="actions"><button id="hookClose">Close</button> <button id="saveAuto">Save</button></div>
+    <p class="hint">LIVE also needs the master Trading switch in Settings set to Enabled. At the exit time the automation cancels its leftover TP/SL orders and squares off the positions it opened (entries stop at that time; it works even if automation is switched off). Today: <span id="a_today"></span></p>
     <div class="msg" id="autoMsg"></div>
+    <div class="actions"><button id="hookClose">Close</button> <button id="saveAuto" class="primary">Save</button></div>
     </div></div>
   </section>
 
-  <section>
-    <h2>Global config</h2>
-    <div class="grid">
-      <label>Max capital per order (₹) <input id="maxCap" inputmode="decimal"></label>
-      <label>Trading <select id="enabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></label>
-      <label title="Saved in this browser only; applies immediately">Alert sound (this browser) <select id="soundSel"><option value="on">On</option><option value="off">Off</option></select></label>
-    </div>
-    <div class="actions"><button id="saveLimits">Save</button></div>
-    <div class="msg" id="limMsg"></div>
-    <p style="font-size:12px;color:var(--mut)">Instrument list (used for symbol search and alerts): <span id="instInfo">...</span> <button id="instBtn">Download latest</button></p>
-    <div class="msg" id="instMsg"></div>
-  </section>
-
-  <section>
-    <h2>Place order</h2>
-    <div class="grid">
-      <label style="position:relative">Symbol <input id="sym" autocomplete="off" placeholder="type 2+ letters"><div id="results" class="hidden"></div></label>
-      <label>Selected <input id="selected" readonly></label>
-      <label>Side <div class="seg" id="side"><button data-v="BUY" class="on">BUY</button><button data-v="SELL">SELL</button></div></label>
-      <label>Order type <div class="seg" id="otype"><button data-v="MARKET" class="on">MARKET</button><button data-v="LIMIT">LIMIT</button></div></label>
-      <label>Product <select id="product"><option>INTRADAY</option><option>CNC</option><option>MARGIN</option><option>MTF</option></select></label>
-      <label id="priceBox"><span id="priceLbl">Price</span> <input id="price" inputmode="decimal"></label>
+  <section data-pg="place">
+    <h2><span class="ttl">Place order</span></h2>
+    <div class="card grid">
+      <label class="full" style="position:relative"><span>Symbol<span class="req">*</span></span> <input id="sym" autocomplete="off" placeholder="Search, type 2+ letters"><div id="results" class="hidden"></div><span class="hint" id="scripInfo"></span></label>
+      <label class="full">Selected <input id="selected" readonly placeholder="Nothing selected"></label>
+      <label><span>Side<span class="req">*</span></span> <div class="seg" id="side"><button data-v="BUY" class="on">BUY</button><button data-v="SELL">SELL</button></div></label>
+      <label><span>Order type<span class="req">*</span></span> <div class="seg" id="otype"><button data-v="MARKET" class="on">MARKET</button><button data-v="LIMIT">LIMIT</button></div></label>
+      <label><span>Product<span class="req">*</span></span> <select id="product"><option>INTRADAY</option><option>CNC</option><option>MARGIN</option><option>MTF</option></select></label>
+      <label id="priceBox"><span><span id="priceLbl">Price</span><span class="req hidden" id="priceReq">*</span></span> <input id="price" inputmode="decimal"></label>
       <label>Quantity <input id="qty" inputmode="numeric" placeholder="optional"></label>
-      <label>Max capital (₹) <input id="maxcap" inputmode="decimal" required></label>
-      <label>TP / SL unit <select id="tpslu"><option value="PCT">% of price</option><option value="INR">₹ price</option></select></label>
+      <label><span>Max capital (₹)<span class="req">*</span></span> <input id="maxcap" inputmode="decimal" required></label>
+      <label class="full">TP / SL unit <div class="seg" id="tpslu"><button data-v="PCT" class="on" title="Percent of the price">% of price</button><button data-v="INR" title="Absolute price">₹ price</button></div></label>
       <label>Target (TP) <input id="tp" inputmode="decimal" placeholder="optional"></label>
       <label>Stop loss (SL) <input id="sl" inputmode="decimal" placeholder="optional"></label>
+      <button id="review" class="full">Review order</button>
     </div>
-    <p style="font-size:12px;color:#666">Live prices come from Yahoo Finance (free, unofficial; BSE is ~15 min delayed). For MARKET orders the server uses its own fresh quote for sizing and the capital check, and falls back to the price you enter only if no fresh quote is available. TP and SL (both in %) are tracked by this server, which sends a MARKET exit when the live price crosses them; they are not placed at the broker.</p>
-    <div class="actions"><button id="review">Review order</button></div>
     <div class="msg" id="orderMsg"></div>
   </section>
 
 
-  <section>
-    <h2 class="hd">Brokers <button id="addBrokerBtn" class="round" title="Add broker" aria-label="Add broker"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></h2>
-    <p style="font-size:12px;color:var(--mut)">Add the brokers you use (+), edit one to set up its login, or delete it. The active broker is the one orders go to. Switching is blocked while Trading or any webhook is on.</p>
+  <section data-pg="config">
+    <h2><span class="ttl">Settings</span></h2>
+    <div class="card grid">
+      <label class="full">Max capital per order (₹) <input id="maxCap" inputmode="decimal"></label>
+      <label>Trading <select id="enabled"><option value="false">Disabled</option><option value="true">Enabled</option></select></label>
+      <label title="Saved in this browser only; applies immediately">Alert sound <select id="soundSel"><option value="on">On</option><option value="off">Off</option></select></label>
+      <div class="actions full"><button id="saveLimits" class="primary">Save</button></div>
+    </div>
+    <div class="msg" id="limMsg"></div>
+  </section>
+
+  <section data-pg="brokers">
+    <h2 class="hd"><span class="ttl">Brokers</span> <button id="addBrokerBtn" class="round primary" title="Add broker" aria-label="Add broker"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></h2>
     <div id="brokerList"></div>
     <div class="msg" id="brokerListMsg"></div>
   </section>
 
-  <section>
-    <h2>Server IP <button id="ripBtn" title="Refresh" aria-label="Refresh" class="refresh"><span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></span></button></h2>
-    <p style="font-size:12px;color:var(--mut)">Whitelist this IP in your broker's API settings.</p>
-    <p><code id="serverIp">...</code> <button class="copy" data-src="serverIp" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
-    <div class="msg" id="ipMsg"></div>
-  </section>
 </main>
 <main id="accountView" class="hidden">
   <section>
-    <h2 class="hd">Account <button id="accBack">Back to dashboard</button></h2>
+    <h2><button id="accBack" class="hb back" title="Back" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><span class="ttl">Account</span></h2>
   </section>
   <section>
-    <h2>Change password</h2>
+      <div class="srow"><span>Server IP</span><b><code id="serverIp">...</code> <button class="copy" data-src="serverIp" title="Copy" aria-label="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button id="ripBtn" title="Refresh IP" aria-label="Refresh IP" class="hb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></button></b></div>
+    <div class="msg" id="ipMsg"></div>
+  </section>
+  <section>
+    <h3>Change password</h3>
     <div class="grid">
-      <label>Current password <input id="pwCur" type="password" autocomplete="current-password"></label>
-      <label>New password (min 8 characters) <input id="pwNew" type="password" autocomplete="new-password"></label>
-      <label>Repeat new password <input id="pwNew2" type="password" autocomplete="new-password"></label>
+      <label class="full">Current password <input id="pwCur" type="password" autocomplete="current-password"></label>
+      <label class="full">New password (min 8 characters) <input id="pwNew" type="password" autocomplete="new-password"></label>
+      <label class="full">Repeat new password <input id="pwNew2" type="password" autocomplete="new-password"></label>
     </div>
-    <div class="actions"><button id="pwSave">Change password</button></div>
+    <div class="actions"><button id="pwSave" class="primary">Change password</button></div>
     <div class="msg" id="pwMsg"></div>
   </section>
   <section>
-    <h2>Your data</h2>
-    <p style="font-size:12px;color:var(--mut)">Export downloads everything stored for this account (brokers and their logins, webhooks, limits, logs and order history) as one file. It contains your broker logins and webhook URLs, so keep it private. Import replaces all current data with the contents of such a file; your password stays as it is.</p>
+    <h3>Your data</h3>
+    <p class="hint">Export downloads everything stored for this account (brokers and their logins, webhooks, limits, logs and order history) as one file. It contains your broker logins and webhook URLs, so keep it private. Import replaces all current data with the contents of such a file; your password stays as it is.</p>
     <div class="actions"><button id="expBtn">Export data</button> <button id="impBtn">Import data</button><input type="file" id="impFile" accept=".json,application/json" class="hidden"></div>
     <div class="msg" id="dataMsg"></div>
   </section>
   <section>
-    <h2>Delete account</h2>
-    <p style="font-size:12px;color:var(--mut)">Erases all data on this server and the password. This cannot be undone. Export your data first if you may want it back.</p>
-    <div class="actions"><button id="delAccount">Delete account</button></div>
+    <h3>Delete account</h3>
+    <p class="hint">Erases all data on this server and the password. This cannot be undone. Export your data first if you may want it back.</p>
+    <div class="actions"><button id="delAccount" class="danger">Delete account</button></div>
   </section>
 </main>
+<nav id="tabs">
+  <button data-go="home" class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>Home</button><button data-go="alerts"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>Alerts<i id="dot_alerts" class="dot hidden" aria-live="polite"></i></button><button data-go="hooks"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Hooks</button><button data-go="positions"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Positions</button><button data-go="orders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>Orders</button><button data-go="place"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Place</button><button data-go="logs"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Logs<i id="dot_logs" class="dot hidden" aria-live="polite"></i></button>
+</nav>
+
 </div>
 
-<div id="modal"><div>
+<div id="modal" class="ovl"><div class="sheet" role="dialog" aria-modal="true" aria-label="Confirm real order">
   <h2>Confirm real order</h2><pre id="summary"></pre>
-  <button id="cancelModal">Cancel</button> <button id="confirm" class="primary">Place order</button>
+  <div class="actions"><button id="cancelModal">Cancel</button> <button id="confirm" class="primary">Place order</button></div>
 </div></div>
 
-<div id="addModal" class="hidden"><div role="dialog" aria-modal="true" aria-label="Add broker">
+<div id="addModal" class="ovl hidden"><div class="sheet" role="dialog" aria-modal="true" aria-label="Add broker">
   <h2>Add broker</h2><div id="addList"></div>
-  <div style="text-align:right"><button id="addClose">Close</button></div>
+  <div class="actions"><button id="addClose">Close</button></div>
 </div></div>
 
-<div id="brokerModal" class="hidden"><div role="dialog" aria-modal="true" aria-labelledby="bmTitle">
+<div id="brokerModal" class="ovl hidden"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="bmTitle">
   <h2 class="hd"><span id="bmTitle"></span> <span id="bmActive" class="badge"></span></h2>
-  <div class="actions" id="bmBar"><button id="bmUse">Use this broker</button></div>
+  <div class="actions" id="bmBar"><button id="bmUse" class="primary">Use this broker</button></div>
   <div class="msg" id="bmMsg"></div>
-  <div id="cfgBox">
-    <h3 style="margin:4px 0">Settings</h3>
+  <div id="cfgBox" style="display:grid;gap:12px">
+    <h3>Settings</h3>
     <div class="grid"><span id="cfgFields" style="display:contents"></span></div>
-    <div class="actions"><button id="cfgSave">Save</button></div>
+    <div class="actions"><button id="cfgSave" class="primary">Save</button></div>
     <div class="msg" id="cfgMsg"></div>
+  </div>
+  <div id="instBox" style="display:grid;gap:12px">
+    <h3>Instrument list</h3>
+    <p class="hint">This broker's own stock list, used for symbol search and alerts when it is the active broker: <span id="instInfo">...</span></p>
+    <div class="actions"><button id="instBtn">Download latest</button></div>
+    <div class="msg" id="instMsg"></div>
   </div>
   <section>
     <h2 class="hd"><span id="oauthTitle">API key</span> <label class="sw" title="Enable"><input type="checkbox" id="tgBroker"><span></span></label></h2>
-    <p style="font-size:12px;color:var(--mut)" id="oauthHelp"></p>
-    <p style="font-size:12px">Redirect URL: <code id="redirectUrl"></code> <button class="copy" data-src="redirectUrl" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><br>Postback URL (keep secret): <code id="postbackUrl"></code> <button class="copy" data-src="postbackUrl" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <p class="hint" id="oauthHelp"></p>
+    <div class="urlrow"><span>Redirect URL<code id="redirectUrl"></code></span> <button class="copy" data-src="redirectUrl" title="Copy" aria-label="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+    <div class="urlrow"><span>Postback URL (keep secret)<code id="postbackUrl"></code></span> <button class="copy" data-src="postbackUrl" title="Copy" aria-label="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
     <div class="grid">
-      <label>App name <input id="b_name" autocomplete="off"></label>
-      <label>API key <input id="b_key" autocomplete="off" spellcheck="false"></label>
-      <label>API secret <input id="b_secret" type="password" autocomplete="new-password" spellcheck="false" placeholder="unchanged"></label>
+      <label class="full">App name <input id="b_name" autocomplete="off"></label>
+      <label class="full">API key <input id="b_key" autocomplete="off" spellcheck="false"></label>
+      <label class="full">API secret <input id="b_secret" type="password" autocomplete="new-password" spellcheck="false" placeholder="unchanged"></label>
     </div>
-    <div class="actions"><span style="margin-right:auto"></span> <button id="brokerSave">Save</button> <button id="brokerVerify">Verify</button> <button id="brokerLogin2">Log in</button></div>
+    <div class="actions"><button id="brokerSave" class="primary">Save</button> <button id="brokerVerify">Verify</button> <button id="brokerLogin2">Log in</button></div>
     <div class="msg" id="brokerMsg"></div>
   </section>
 
   <section>
     <h2 class="hd"><span id="tokenTitle">Access token</span> <label class="sw" title="Enable"><input type="checkbox" id="tgDat"><span></span></label></h2>
-    <p style="font-size:12px">Postback URL (keep secret): <code id="postbackUrl2"></code> <button class="copy" data-src="postbackUrl2" title="Copy" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+    <div class="urlrow"><span>Postback URL (keep secret)<code id="postbackUrl2"></code></span> <button class="copy" data-src="postbackUrl2" title="Copy" aria-label="Copy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
     <div class="grid">
-    <label>App name <input id="dtokName" autocomplete="off"></label>
-    <label>New daily token <input id="dtok" type="password" autocomplete="off" spellcheck="false" placeholder="unchanged"></label>
+    <label class="full">App name <input id="dtokName" autocomplete="off"></label>
+    <label class="full">New daily token <input id="dtok" type="password" autocomplete="off" spellcheck="false" placeholder="unchanged"></label>
     </div>
-    <div class="actions"><button id="dtokSave">Save</button> <button id="dtokVerify">Verify</button></div>
+    <div class="actions"><button id="dtokSave" class="primary">Save</button> <button id="dtokVerify">Verify</button></div>
     <div class="msg" id="dtokMsg"></div>
   </section>
-  <div style="text-align:right"><button id="bmClose">Close</button></div>
+  <div class="actions"><button id="bmClose">Close</button></div>
 </div></div>
 
-<div id="perfModal" class="hidden"><div role="dialog" aria-modal="true" aria-labelledby="perfTitle">
+<div id="perfModal" class="ovl hidden"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="perfTitle">
   <h2 id="perfTitle">Performance</h2><div id="perfBody"></div>
-  <div style="text-align:right"><button id="perfClose">Close</button></div>
+  <div class="actions"><button id="perfClose">Close</button></div>
 </div></div>
 
-<div id="jsonModal" class="hidden"><div role="dialog" aria-modal="true" aria-label="Webhook JSON">
+<div id="jsonModal" class="ovl hidden"><div class="sheet" role="dialog" aria-modal="true" aria-label="Webhook JSON">
   <h2 id="jsonTitle">Webhook JSON</h2><pre id="jsonPre"></pre>
-  <div style="text-align:right"><button id="jsonClose">Close</button></div>
+  <div class="actions"><button id="jsonClose">Close</button></div>
 </div></div>
 
 <script>
 const $ = id => document.getElementById(id);
-let sel = null, side = "BUY", otype = "MARKET";
+let sel = null, side = "BUY", otype = "MARKET", tpslUnit = "PCT";
 
 let activeBroker = "", bm = "";  // bm: the broker whose details window is open
 async function api(path, body, broker = bm || activeBroker) {  // credential calls are about one specific broker
-  if (/^(auth|broker-config)/.test(path) && broker) {
+  if (/^(auth|broker-config|instruments)/.test(path) && broker) {
     if (body === undefined) path += (path.includes("?") ? "&" : "?") + "broker=" + encodeURIComponent(broker);
     else body = {...body, broker};
   }
   const r = await fetch("/api/" + path, body === undefined ? {} : {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   let j = {}; try { j = await r.json(); } catch (e) {}
-  if (r.status === 401 && path !== "login" && path !== "account/status") showLogin();
+  if (r.status === 401 && j.error === "not logged in" && path !== "login" && path !== "account/status") showLogin();  // only a real logged-out answer; a wrong password is a normal error
   return {ok: r.ok, status: r.status, data: j};
 }
 function done(btn, r, msgEl) {  // success: button turns green "Saved" until a value changes; failure: show error
@@ -392,10 +612,19 @@ function msg(el, text, ok) {  // errors go to the top-right toast; only success/
   if (!ok) { el.className = "msg"; el.textContent = ""; toast(text); return; }
   el.className = "msg ok"; el.textContent = text; }
 let hasAccount = true;
-async function showLogin() { $("app").classList.add("hidden");
+function loginErr(text, field) {  // the login form shows its error next to the fields (it stays until the next try), not in the toast
+  $("loginMsg").className = text ? "msg err" : "msg"; $("loginMsg").textContent = text || "";
+  for (const id of ["pw", "pw2"]) { if (text && id === field) $(id).setAttribute("aria-invalid", "true"); else $(id).removeAttribute("aria-invalid"); }
+  if (field) { $(field).focus(); $(field).select(); } }
+function showPw(on) { for (const id of ["pw", "pw2"]) $(id).type = on ? "text" : "password";
+  const b = $("pwShow"); b.setAttribute("aria-pressed", on); b.setAttribute("aria-label", on ? "Hide password" : "Show password"); b.title = b.getAttribute("aria-label");
+  b.children[0].classList.toggle("hidden", on); b.children[1].classList.toggle("hidden", !on); }
+async function showLogin() { $("app").classList.add("hidden"); const wasHidden = $("login").classList.contains("hidden");
   const r = await api("account/status"); if (r.ok) hasAccount = r.data.exists;
-  $("loginTitle").textContent = hasAccount ? "Login" : "Create account"; $("loginBtn").textContent = hasAccount ? "Log in" : "Create account";
-  if (hasAccount && !lockedOut && !unlockShown) await checkLock(); $("login").classList.toggle("hidden", lockedOut || unlockShown); $("pw2Box").classList.toggle("hidden", hasAccount); $("pw").autocomplete = hasAccount ? "current-password" : "new-password"; $("loginMsg").textContent = ""; }
+  $("loginTitle").textContent = hasAccount ? "Log in" : "Create account"; if (!loginBusy) $("loginBtn").textContent = hasAccount ? "Log in" : "Create account";
+  $("loginSub").textContent = hasAccount ? "" : "Choose a password to protect this dashboard. You will need it every time you log in."; $("loginSub").classList.toggle("hidden", hasAccount);
+  if (hasAccount && !lockedOut && !unlockShown) await checkLock(); $("login").classList.toggle("hidden", lockedOut || unlockShown); $("pw2Box").classList.toggle("hidden", hasAccount); $("pwHint").classList.toggle("hidden", hasAccount); $("pw").autocomplete = hasAccount ? "current-password" : "new-password";
+  if (wasHidden && !$("login").classList.contains("hidden")) { loginErr(""); showPw(false); $("capsMsg").classList.add("hidden"); $("pw").focus(); } }  // a repeat call (several requests answered "logged out") leaves what is on screen alone
 let colLabels = [];  // titles of the table being built: its header row comes first, then its rows
 function row(cells, tag = "td") {
   const tr = document.createElement("tr");
@@ -423,31 +652,47 @@ function showUnlocked() {  // stays until the user continues to the login box (i
 $("lockContinue").onclick = () => { unlockShown = false; unlockAcked = true; $("lockPage").className = "hidden"; $("loginBtn").disabled = false; $("login").classList.remove("hidden"); $("pw").focus(); };
 async function checkLock() { const r = await api("login/status"); if (!r.ok) return;
   if (r.data.locked) lockCountdown(r.data.retry_after); else if (r.data.unlocked && !unlockAcked) showUnlocked(); }
-$("loginBtn").onclick = async () => {
-  if (!hasAccount && $("pw").value !== $("pw2").value) return msg($("loginMsg"), "passwords do not match", false);
-  const r = await api(hasAccount ? "login" : "account/create", {password: $("pw").value});
-  if (r.status === 429 && r.data.retry_after) return lockCountdown(r.data.retry_after);
-  if (!r.ok) return msg($("loginMsg"), r.data.error || "failed", false);
-  $("pw").value = $("pw2").value = ""; start();
+let loginBusy = false;  // a request is on its way: a second tap or Enter must not send (and count) another attempt
+$("loginForm").onsubmit = async e => { e.preventDefault(); if (loginBusy) return;
+  const pw = $("pw").value, btn = $("loginBtn"), creating = !hasAccount;
+  if (!pw) return loginErr(creating ? "Choose a password." : "Enter your password.", "pw");
+  if (creating && pw.length < 8) return loginErr("Use at least 8 characters.", "pw");
+  if (creating && pw !== $("pw2").value) return loginErr("The two passwords don't match.", "pw2");
+  loginErr(""); loginBusy = true; btn.disabled = true; btn.textContent = creating ? "Creating account..." : "Logging in...";
+  let r; try { r = await api(creating ? "account/create" : "login", {password: pw}); } catch { r = {ok: false, status: 0, data: {}}; }
+  loginBusy = false; btn.disabled = false; btn.textContent = hasAccount ? "Log in" : "Create account";
+  if (r.status === 429 && r.data.retry_after) { $("pw").value = $("pw2").value = ""; return lockCountdown(r.data.retry_after); }
+  if (!r.ok) { const er = r.data.error || "";
+    return loginErr(!r.status ? "Can't reach the server. Check your connection and try again." : r.status === 401 ? "Wrong password. Try again."
+      : er ? er[0].toUpperCase() + er.slice(1) + "." : "Something went wrong. Try again.", "pw"); }
+  $("pw").value = $("pw2").value = ""; showPw(false); start();
 };
+$("pwShow").onclick = () => { showPw($("pw").type === "password"); $("pw").focus(); };
+for (const ev of ["keydown", "keyup"]) $("loginForm").addEventListener(ev, e => { if (e.getModifierState) $("capsMsg").classList.toggle("hidden", !e.getModifierState("CapsLock")); });
+$("loginForm").addEventListener("input", () => { if ($("loginMsg").textContent) loginErr(""); });  // the error goes once the user starts fixing it
 $("dtokSave").onclick = async () => {
   const r = await api("auth/token", {token: $("dtok").value.trim(), app_name: $("dtokName").value});
   done($("dtokSave"), r, $("dtokMsg"));
   if (r.ok) { $("dtok").value = ""; refresh(); loadAuto(); }
 };
-$("pw").onkeydown = e => { if (e.key === "Enter") $("loginBtn").click(); };
 if (localStorage.theme === "light") document.documentElement.classList.add("light");
 document.addEventListener("click", e => {
   const i = e.target.closest(".refresh")?.querySelector(".ico"); if (!i) return;
   i.classList.remove("spin"); void i.offsetWidth; i.classList.add("spin");
 });
-const themeIcon = () => $("theme").textContent = document.documentElement.classList.contains("light") ? "☾" : "☀";
+const MOON_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
+const themeIcon = () => { if (document.documentElement.classList.contains("light")) $("theme").innerHTML = MOON_SVG; else $("theme").textContent = "☀"; };  // the sun (dark theme) is unchanged; the moon (light theme) is a line-art icon like the others
 themeIcon();
 $("menuBtn").onclick = e => { e.stopPropagation(); $("menu").classList.toggle("hidden"); };
 document.addEventListener("click", e => { if (!$("menuWrap").contains(e.target)) $("menu").classList.add("hidden"); });
 $("theme").onclick = () => { const l = document.documentElement.classList.toggle("light"); localStorage.theme = l ? "light" : "dark"; themeIcon(); };
-function showAccount(on) { $("accountView").classList.toggle("hidden", !on); $("mainView").classList.toggle("hidden", on); window.scrollTo(0, 0); }
+function showPage(p) { if (p === "place") loadScripInfo(); markSeen(p); const slot = $("daySlot_" + p); if (slot) slot.append($("logDay")); if (!$("accountView").classList.contains("hidden")) showAccount(false); $("mainView").dataset.p = p; document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.go === p)); const sc = $("mainView").closest("body"); window.scrollTo(0, 0); document.body.scrollTop = 0; }
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => showPage(b.dataset.go));
+function applyHash() { const h = location.hash.slice(1); if ($("tabs").querySelector(`[data-go="${h}"]`) || ["config","brokers"].includes(h)) showPage(h); }
+window.addEventListener("hashchange", applyHash);
+function showAccount(on) { $("tabs").classList.toggle("hidden", on); $("accountView").classList.toggle("hidden", !on); $("mainView").classList.toggle("hidden", on); window.scrollTo(0, 0); }
 $("accountBtn").onclick = () => { $("menu").classList.add("hidden"); showAccount(true); };
+document.querySelectorAll("#menu [data-pg-go]").forEach(b => b.onclick = () => { $("menu").classList.add("hidden"); showPage(b.dataset.pgGo); });
 $("accBack").onclick = () => showAccount(false);
 $("pwSave").onclick = async () => {
   if ($("pwNew").value !== $("pwNew2").value) return toast("New passwords do not match");
@@ -484,7 +729,10 @@ function seg(id, cb) {
     for (const x of $(id).children) x.classList.toggle("on", x === b); cb(b.dataset.v); };
 }
 seg("side", v => side = v);
-seg("otype", v => { otype = v; $("priceLbl").textContent = v === "LIMIT" ? "Limit price" : "Price (live quote used when fresh)"; });
+seg("tpslu", v => tpslUnit = v);
+function syncPrice() {  // MARKET: the price is the live quote, so the field is always read-only; LIMIT: type the limit price
+  const m = otype === "MARKET"; $("price").disabled = m; $("price").placeholder = m ? "live price" : "enter limit price"; }
+seg("otype", v => { otype = v; syncPrice(); $("priceReq").classList.toggle("hidden", v !== "LIMIT"); if (v === "MARKET" && sel) loadQuote();  /* drop any typed limit price */ $("priceLbl").textContent = v === "LIMIT" ? "Limit price" : "Price"; });
 
 let t;
 $("sym").oninput = () => { clearTimeout(t); t = setTimeout(async () => {
@@ -498,13 +746,14 @@ $("sym").oninput = () => { clearTimeout(t); t = setTimeout(async () => {
   box.classList.remove("hidden"); }, 250); };
 
 async function loadQuote() {
-  $("price").placeholder = "fetching price...";
+  $("price").value = ""; syncPrice(); $("price").placeholder = "fetching price...";
   const r = await api(`quote?security_id=${sel.security_id}&exchange=${sel.exchange}`);
-  $("price").placeholder = "enter price manually";
-  if (!r.ok) return;
-  $("price").value = r.data.price;
+  syncPrice();
+  if (!r.ok) { if (otype === "MARKET") $("price").placeholder = "no live quote - use LIMIT"; return; }
+  $("price").value = r.data.price; syncPrice();
 }
 $("price").onfocus = () => {};
+syncPrice();
 function orderBody() {
   if (!sel) throw new Error("pick a symbol from the list");
   const q = $("qty").value.trim(), c = $("maxcap").value.trim();
@@ -512,7 +761,7 @@ function orderBody() {
   if (q && !/^[1-9][0-9]*$/.test(q)) throw new Error("quantity must be a whole number >= 1");
   return {security_id: sel.security_id, exchange: sel.exchange, side, order_type: otype, product: $("product").value,
     price: otype === "LIMIT" ? $("price").value : undefined, ref_price: otype === "MARKET" ? $("price").value : undefined,
-    qty: $("qty").value, max_capital: $("maxcap").value, tp: $("tp").value, sl: $("sl").value, tp_unit: $("tpslu").value, sl_unit: $("tpslu").value};
+    qty: $("qty").value, max_capital: $("maxcap").value, tp: $("tp").value, sl: $("sl").value, tp_unit: tpslUnit, sl_unit: tpslUnit};
 }
 $("review").onclick = async () => {
   let body; try { body = orderBody(); } catch (e) { return msg($("orderMsg"), e.message, false); }
@@ -533,26 +782,74 @@ $("review").onclick = async () => {
 };
 $("cancelModal").onclick = () => $("modal").style.display = "none";
 
-async function refresh() { loadFunds(); loadPositions(); loadOrders(); }
+async function refresh() { loadFunds(); loadPositions(); loadOrders(); loadToday(); loadScripInfo(); }
+let noteList = [];
+function paintNotices() {  // important messages: red for a problem, amber for a warning
+  const nb = $("notices"); nb.textContent = "";
+  for (const n of noteList) { const e = document.createElement("div"); e.className = "note" + (n.level === "bad" ? " bad" : ""); e.textContent = n.text; nb.append(e); }
+  nb.classList.toggle("hidden", !noteList.length); }
+let limitList = [], limTouched = 0;  // limTouched: when a +/- was last tapped (the 3-second refresh leaves the card alone for a moment after)
+const MINUS_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+const PLUS_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+function paintLimits(list, placeholder = false) {  // the limits: name, a - / + stepper holding today's limit, and a bar of how much is LEFT
+  if (!placeholder && Date.now() - limTouched < 4000) return;  // just tapped: do not redraw under the user's finger
+  if (!placeholder) limitList = list; const wrap = $("limCards"); wrap.textContent = "";  // placeholder: field names only, values still "-" (drawn before the data arrives)
+  const money = v => "₹" + Number(v).toLocaleString("en-IN", {maximumFractionDigits: 0});
+  for (const h of list) {
+    const box = document.createElement("div"); box.className = "card limCard"; wrap.append(box);  // each webhook has its own limits, so each gets its own card
+    const t = document.createElement("h3"); t.textContent = h.name ? h.name + " - today's limits" : "Today's limits"; box.append(t);
+    for (const b of h.bars) { const none = b.used == null, fmt = v => b.money ? money(v) : String(v), d = document.createElement("div");
+      const row = document.createElement("div"); row.className = "stepRow";
+      const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = b.label;
+      const st = document.createElement("div"); st.className = "stepper"; const val = document.createElement("b"); val.className = "stepVal";
+      const bar = document.createElement("span"); bar.className = "lbar"; const f = document.createElement("i"); bar.append(f);
+      let minus;
+      const show = () => { const pct = none ? 0 : b.max > 0 ? Math.min(100, b.used / b.max * 100) : 100;
+        val.textContent = none ? "-" : fmt(b.max); const left = none ? 0 : 100 - pct; f.style.width = left + "%"; f.style.background = none ? "" : barColor(left);
+        bar.classList.toggle("empty", !none && left <= 0); bar.style.animationDelay = -(Date.now() % 1400) + "ms";  // same phase after each redraw, so it does not restart  // the bar shows what is LEFT, like the token bar
+        if (minus) minus.disabled = none || b.max - b.step < 0; };
+      const mk = (svg, sign, label) => { const x = document.createElement("button"); x.innerHTML = svg; x.title = label; x.setAttribute("aria-label", label + " " + b.label);
+        x.onclick = () => {  // changes on screen at once; the request follows in the background and the change is undone if it fails
+          const delta = sign * b.step; if (none || b.max + delta < 0) return; limTouched = Date.now();
+          b.max += delta; b.extra = (b.extra || 0) + delta; show();
+          api(`webhooks/${h.id}/extend`, {what: b.key, amount: delta}).then(r => { limTouched = Date.now(); if (r.ok) return;
+            b.max -= delta; b.extra -= delta; show(); msg($("hookMsg"), r.data.error || "failed", false); }); };
+        return x; };
+      minus = mk(MINUS_SVG, -1, "Lower by " + (none ? "" : fmt(b.step))); const plus = mk(PLUS_SVG, 1, "Raise by " + (none ? "" : fmt(b.step))); plus.disabled = none;
+      st.append(minus, val, plus); row.append(nm, st); show(); d.append(row, bar); box.append(d); } }
+  if (!placeholder) { try { localStorage.setItem("flashLimits", JSON.stringify(list.map(h => ({id: h.id, name: h.name, bars: h.bars.map(b => ({label: b.label, key: b.key, money: b.money, step: b.step}))})))); } catch {} } }
+(function () {  // first paint: the field names from last time (or the standard four), so the card is full height before the data comes in
+  let c = null; try { c = JSON.parse(localStorage.getItem("flashLimits") || "null"); } catch {}
+  if (!Array.isArray(c)) c = [{name: "", bars: ["Daily trades", "Daily capital", "Open positions", "Daily loss"].map(label => ({label}))}];
+  paintLimits(c, true); })();
+async function loadToday() { const r = await api("today"); if (!r.ok) return; const d = r.data, v = x => x == null ? "-" : x;
+  paintLimits(d.limits || []); noteList = d.notices || []; paintNotices();
+  $("tAlerts").textContent = d.alerts; $("tOrders").textContent = v(d.orders);
+  $("tProfit").textContent = d.profit == null ? "-" : "₹" + d.profit; $("tLoss").textContent = d.loss == null ? "-" : "₹" + d.loss;
+  $("tNet").textContent = d.net == null ? "-" : (d.net < 0 ? "-₹" + -d.net : "₹" + d.net); $("tNet").style.color = d.net > 0 ? "var(--pos)" : d.net < 0 ? "var(--neg)" : ""; }
 async function loadFunds() { if (!hasBrokers) { $("bal").textContent = "-"; return; }
-  const r = await api("funds"); $("bal").textContent = r.ok ? "₹" + r.data.available : "unavailable"; }
+  const r = await api("funds"); setConn(r); $("bal").textContent = r.ok ? "₹" + r.data.available : r.data.token_invalid ? "log in again" : "unavailable"; }
 async function loadLimits() { const r = await api("limits"); if (!r.ok) return;
   $("maxCap").value = r.data.max_capital; $("enabled").value = String(r.data.trading_enabled);
   markSaved($("saveLimits")); }
 $("saveLimits").onclick = async () => {
   const r = await api("limits", {max_capital: $("maxCap").value, trading_enabled: $("enabled").value === "true"});
   done($("saveLimits"), r, $("limMsg")); loadLimits(); };
+function shown(el, r) {  // a failed broker call is shown on its page, not left as an empty table
+  setConn(r); el.textContent = ""; el.className = "msg";
+  if (!r.ok || !Array.isArray(r.data)) { el.className = "msg err"; el.textContent = (r.data && r.data.error) || "Broker data unavailable"; return false; }
+  return true; }
 async function loadPositions() { const r = await api("positions"); const t = $("positions"); t.textContent = "";
-  if (!r.ok || !Array.isArray(r.data)) return;
+  if (!shown($("positionsMsg"), r)) return;
   t.append(row(["Symbol", "Product", "Net qty", "Buy avg", "Sell avg", "Realized", "Unrealized", "P&L %"], "th"));
   for (const p of r.data) {  // % = total P&L over the capital traded (the larger of bought / sold value)
     const base = Math.max(p.buy_avg * p.buy_qty, p.sell_avg * p.sell_qty), pl = p.realized_pnl + p.unrealized_pnl;
     const pct = base > 0 ? (pl / base * 100).toFixed(2) + "%" : "";
     const tr = row([p.symbol, p.product, p.net_qty, p.buy_avg, p.sell_avg, p.realized_pnl, p.unrealized_pnl, pct]);
-    if (pct) tr.lastChild.style.color = pl > 0 ? "#0b6" : pl < 0 ? "#d33" : "";
+    for (const i of [5, 6]) { const v = i === 5 ? p.realized_pnl : p.unrealized_pnl; tr.children[i].style.color = v > 0 ? "var(--pos)" : v < 0 ? "var(--neg)" : ""; }  // Realized and Unrealized: green profit, red loss
     t.append(tr); } }
 async function loadOrders() { const r = await api("orders"); const t = $("orders"); t.textContent = "";
-  if (!r.ok || !Array.isArray(r.data)) return;
+  if (!shown($("ordersMsg"), r)) return;
   t.append(row(["Time", "Symbol", "Side", "Type", "Qty", "Price", "Status", ""], "th"));
   for (const o of r.data) {
     const open = ["PENDING", "PARTIAL"].includes(o.status);
@@ -560,7 +857,8 @@ async function loadOrders() { const r = await api("orders"); const t = $("orders
     b.onclick = async () => { const c = await api("cancel", {order_id: o.order_id}); msg($("ordersMsg"), JSON.stringify(c.data), c.ok); loadOrders(); };
     t.append(row([(o.time || "").slice(11), o.symbol, o.side, o.order_type, o.qty, o.price, o.status + (o.message ? " - " + o.message : ""), open ? b : ""])); } }
 $("rp").onclick = loadPositions; $("ro").onclick = loadOrders;
-$("rs").onclick = () => { loadBrokerTok(); loadFunds(); };
+$("rh").onclick = () => { loadBrokerTok(); loadAuto(); };  // webhooks and the login state their status depends on
+$("rs").onclick = () => { loadBrokerTok(); loadFunds(); loadToday(); };
 
 
 const AUTO_NUM = ["stocks_per_alert","max_positions","max_daily_trades","capital_per_stock","max_daily_capital","max_qty","exit_timeout","limit_buffer","tp_pct","sl_pct","max_daily_loss","cooldown_minutes"];
@@ -611,6 +909,20 @@ function drawPerf(card, pts) {  // cumulative realised P&L by day, zero baseline
     tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, X(i) / W * b.width - tip.offsetWidth / 2)) + "px"; tip.style.top = (svg.offsetTop + Y(p.cum) / H * b.height - 34) + "px"; };
   svg.onpointermove = show; svg.onpointerdown = show; svg.onpointerleave = () => { dot.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
   card.append(svg, tip); }
+function istHM() { return new Date().toLocaleTimeString("en-GB", {timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false}); }  // the rules' times are IST
+function hookStatus(h) {  // is this webhook actually running right now, and if not, why: {text, s} (s: ok / warn / bad / off)
+  const r = h.rules, t = h.today, now = istHM();
+  if (!r.enabled) return {text: "Off", s: "off"};
+  if (r.mode === "live" && $("enabled").value !== "true") return {text: "Trading off", s: "warn"};
+  if (brokerDown) return {text: "No connection", s: "warn"};
+  if (tokExpired || (tokLoaded && !tokValid)) return {text: "Token expired", s: "bad"};
+  if (now < r.window_start) return {text: "Starts " + r.window_start, s: "off"};
+  if (r.exit_time && now >= r.exit_time) return {text: "Done for today", s: "off"};
+  if (now > r.window_end) return {text: "Window closed", s: "off"};
+  if (t.trades >= (t.max_trades ?? r.max_daily_trades)) return {text: "Trades limit", s: "warn"};
+  if (t.capital + r.capital_per_stock > (t.max_capital ?? r.max_daily_capital)) return {text: "Capital limit", s: "warn"};
+  return {text: "Running", s: "ok"}; }
+setInterval(() => { if (!document.hidden && $("mainView").dataset.p === "hooks" && $("accountView").classList.contains("hidden") && !document.querySelector(".ovl:not(.hidden):not(#modal)")) renderHooks(); }, 30000);  // statuses follow the clock (no network: the rules are already loaded)
 function renderHooks() { const t = $("hookTable"); t.textContent = "";
   if (!hooks.length) { t.textContent = "No webhooks yet. Use + to add one."; return; }
   t.append(row(["Name", "Status", "Mode", "Side", "Trades", "Value (₹)", ""], "th"));
@@ -619,18 +931,23 @@ function renderHooks() { const t = $("hookTable"); t.textContent = "";
     const cp = document.createElement("button"); cp.className = "copy ibtn"; cp.dataset.src = u.id; cp.title = "Copy webhook URL"; cp.setAttribute("aria-label", "Copy webhook URL"); cp.innerHTML = COPY_SVG;
     const acts = document.createElement("span"); acts.className = "racts";
     acts.append(u, cp, iconBtn(CHART_SVG, "Performance", "", () => openPerf(h)), iconBtn(PENCIL_SVG, "Edit", "", () => editHook(h.id)), iconBtn(TRASH_SVG, "Delete", "del", () => delHook(h.id)));
-    const tr = row([h.name, h.rules.enabled ? "On" : "Off", h.rules.mode === "live" ? "LIVE" : "DEMO", h.rules.side, String(h.today.trades), String(h.today.capital), acts]);
+    const hs = hookStatus(h), tr = row([h.name, hs.text, h.rules.mode === "live" ? "LIVE" : "DEMO", h.rules.side, String(h.today.trades), String(h.today.capital), acts]);
+    tr.children[1].dataset.s = hs.s; tr.children[1].title = "Webhook status";
     if (h.id === hookId) tr.classList.add("sel"); t.append(tr); } }
+async function loadScripInfo() {  // which broker's scrip master the symbol search is using
+  const r = await api("instruments", undefined, activeBroker); if (!r.ok) return;
+  const n = statName || activeBroker, d = r.data;
+  $("scripInfo").textContent = !hasBrokers ? "No broker added" : d.count ? `Scrip master: ${n}, ${d.count.toLocaleString()} instruments, downloaded ${new Date(d.updated * 1000).toLocaleDateString()}` : `Scrip master: ${n}, not downloaded yet (Brokers > ${n} > Instrument list)`; }
 async function loadInstruments() { const r = await api("instruments"); if (!r.ok) return; const d = r.data;
   $("instInfo").textContent = d.count ? `${d.count} instruments, downloaded ${new Date(d.updated * 1000).toLocaleString()}` : "not downloaded yet";
   $("instBtn").textContent = d.count ? "Download latest" : "Download"; $("instBtn").disabled = !d.can_download;
-  $("instBtn").title = d.can_download ? "" : "Add a broker first"; }
+  $("instBtn").title = d.can_download ? "" : "Verify this broker's login first"; }
 $("instBtn").onclick = async () => {
   if (!confirm("Download the instrument list from the broker now? (about 25 MB)")) return;
   $("instBtn").disabled = true; msg($("instMsg"), "Downloading...", true);
   const r = await api("instruments/refresh", {});
   if (r.ok) $("instMsg").textContent = ""; else msg($("instMsg"), r.data.error || "failed", false);
-  loadInstruments(); };
+  loadInstruments(); loadScripInfo(); };
 function setDefaultsMode(on) { for (const id of ["hookUrlRow"]) $(id).classList.toggle("hidden", on);
   for (const id of ["a_name", "a_enabled"]) $(id).closest("label").classList.toggle("hidden", on); }
 $("hookDefaults").onclick = async () => { const r = await api("webhooks/defaults"); if (!r.ok) return;
@@ -680,25 +997,63 @@ async function loadLogDays() { const r = await api("auto/log/dates"); if (!r.ok)
   r.data.forEach((d, i) => $("logDay").append(new Option(i === 0 ? d + " (today)" : d, d)));
   $("logDay").value = r.data.includes(cur) ? cur : r.data[0]; }
 $("logDay").onchange = () => loadAutoLog();
-function showBox(title, text) { $("jsonTitle").textContent = title; $("jsonPre").textContent = text; $("jsonModal").classList.remove("hidden"); }
+const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+function showBox(title, text) {  // colours JSON tokens by building text nodes and spans (no innerHTML)
+  const pre = $("jsonPre"); pre.textContent = ""; let last = 0;
+  for (const m of text.matchAll(JSON_TOKEN)) {
+    if (m.index > last) pre.append(text.slice(last, m.index));
+    const sp = document.createElement("span"); sp.className = m[1] ? (m[2] ? "k" : "s") : m[3] ? "b" : "n";
+    sp.textContent = m[1] ? m[1] : m[0]; pre.append(sp); if (m[2]) pre.append(m[2]); last = m.index + m[0].length; }
+  if (last < text.length) pre.append(text.slice(last));
+  $("jsonTitle").textContent = title; $("jsonModal").classList.remove("hidden"); }
+// ---- new log entries: outline for 5 seconds, by outcome ----
+const SHOWN = new Map(); let shownDay = null, initialLoad = true;  // entry key -> when this page first saw it (0 = was already there)
+const entryKey = e => [e.ts, e.event, e.webhook, e.symbol, e.attempt, e.reason].join("|");
+function outcome(e) {  // "ok" done, "bad" failed, "neu" nothing to do (ignored / skipped)
+  const acts = (e.decisions || []).map(d => String(d.action));
+  if (e.event === "alert") {
+    if (/^blocked/.test(e.status || "") || acts.includes("REJECTED")) return "bad";
+    return acts.some(a => a === "PLACED" || /^(DEMO|DRY)/.test(a)) ? "ok" : "neu"; }
+  if (e.event === "manual") return e.code === 200 ? "ok" : "bad";
+  if (e.event === "tpsl_exit") return e.http === 200 ? "ok" : "bad";
+  if (e.event === "exit") return (e.steps || []).some(x => /fail|error|reject/i.test(String(x))) ? "bad" : (e.steps || []).length ? "ok" : "neu";
+  return e.event === "entry_resend" ? "neu" : "bad";  // cancelled unfilled orders
+}
+function markRow(tr, e) {
+  tr.classList.add("o-" + outcome(e));
+  const k = entryKey(e); if (!SHOWN.has(k)) SHOWN.set(k, initialLoad ? 0 : Date.now());
+  const since = SHOWN.get(k), age = Date.now() - since; if (!since || age >= 5000) return;
+  tr.classList.add("hl", "hl-" + outcome(e)); tr.style.animationDelay = -age + "ms"; }
+function alertInfo(e) {  // "Alert" plus why it stopped short, in plain words (the raw reasons stay in View)
+  const notes = [], m = (e.status || "").match(/^(?:blocked|ignored): (.*)/);
+  if (m) notes.push(/daily loss/.test(m[1]) ? "Daily loss limit reached" : m[1].charAt(0).toUpperCase() + m[1].slice(1));
+  for (const d of e.decisions || []) { const r = String(d.reason || ""); if (d.action !== "stop" && d.action !== "skip") continue;
+    const t = /max daily trades/.test(r) ? "Daily trades limit reached" : /max positions/.test(r) ? "Max open positions reached" : /max daily capital/.test(r) ? "Daily capital limit reached"
+      : /exceeds capital per stock/.test(r) ? "Price exceeds capital per stock" : ""; if (t && !notes.includes(t)) notes.push(t); }
+  return notes.length ? "Alert: " + notes.join("; ") : "Alert"; }
 async function loadAutoLog() { const day = $("logDay").value; const r = await api("auto/log" + (day ? "?date=" + day : "")); const t = $("autoLog"); t.textContent = "";
-  if (!r.ok) return; if (!r.data.length) { t.append(row(["No webhook activity on this day."])); paintAlerts([]); return; }
+  if (!r.ok) return; if (shownDay !== day) { SHOWN.clear(); shownDay = day; initialLoad = true; }
+  if (!r.data.length) { t.append(row(["No webhook activity on this day."])); paintAlerts([]); initialLoad = false; return; }
   t.append(row(["Time", "Webhook", "Mode", "Scan", "Info", "Orders", "Details"], "th"));
   for (const e of r.data) {
     const exit = e.event === "exit", tpsl = e.event === "tpsl_exit", man = e.event === "manual", tmo = e.event === "tpsl_exit_timeout" || e.event === "entry_timeout" || e.event === "entry_resend";
     const n = tmo ? 0 : man ? (e.code === 200 ? 1 : 0) : tpsl ? (e.http === 200 ? 1 : 0) : exit ? (e.steps || []).filter(x => /^(BUY|SELL|DEMO would) /.test(x)).length
-                   : (e.decisions || []).filter(d => d.action === "PLACED" || /^DEMO/.test(d.action)).length;
+                   : (e.decisions || []).filter(d => d.action === "PLACED" || /^(DEMO|DRY)/.test(d.action)).length;
     const vb = document.createElement("button"); vb.textContent = "View"; vb.style.padding = "2px 8px";
     vb.onclick = () => showBox(tmo ? "Unfilled order cancelled" : man ? "Manual order" : tpsl ? "TP/SL exit" : exit ? "Exit run" : "Alert result",
       tmo ? JSON.stringify(e, null, 2) : man ? JSON.stringify({order: e.order, ref_price: e.ref_price, tp: e.tp, sl: e.sl, http: e.code, response: e.body}, null, 2) : tpsl ? JSON.stringify(e, null, 2) : exit ? JSON.stringify({time: e.time, still_open: e.still_open, steps: e.steps}, null, 2)
            : JSON.stringify({status: e.status, pnl: e.pnl, decisions: e.decisions}, null, 2));
-    t.append(row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.mode || "live", tpsl || exit || man || tmo ? "" : e.scan, e.event === "entry_resend" ? `Re-sent entry: ${e.symbol} (attempt ${e.attempt})` : tmo ? `Cancelled unfilled ${e.event === "entry_timeout" ? "entry" : "exit"}: ${e.symbol} (after ${e.after}s)${e.gave_up ? " - not retried" : ""}` : man ? `${e.order.side} ${e.order.qty} ${e.symbol} @ ${e.order.price || "MARKET"} (${e.order.order_type})${e.code === 200 ? "" : " - " + ((e.body && e.body.error) || "failed")}` : tpsl ? `${e.reason} exit: ${e.symbol} @ ${e.price}` : exit ? "Exit " + (e.time || "") : "Alert", String(n), vb])); }
-  paintAlerts(r.data); }
-function alertSymbols(e) {  // "SYM@price" pairs from the payload; plain symbols when prices are missing
+    const tr = row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.mode || "live", tpsl || exit || man || tmo ? "" : e.scan, e.event === "entry_resend" ? `Re-sent entry: ${e.symbol} (attempt ${e.attempt})` : tmo ? `Cancelled unfilled ${e.event === "entry_timeout" ? "entry" : "exit"}: ${e.symbol} (after ${e.after}s)${e.gave_up ? " - not retried" : ""}` : man ? `${e.order.side} ${e.order.qty} ${e.symbol} @ ${e.order.price || "MARKET"} (${e.order.order_type})${e.code === 200 ? "" : " - " + ((e.body && e.body.error) || "failed")}` : tpsl ? `${e.reason} exit: ${e.symbol} @ ${e.price}` : exit ? "Exit " + (e.time || "") : alertInfo(e), String(n), vb]); markRow(tr, e); t.append(tr); }
+  paintAlerts(r.data); initialLoad = false; }
+function alertSymbols(e) {  // one tag per symbol: the name, then its trigger price when the payload has one
   const p = e.payload || {}, list = x => (Array.isArray(x) ? x : String(x ?? "").split(",")).map(v => String(v).trim()).filter(Boolean);
-  const syms = list(p.stocks ?? p.symbol), px = list(p.trigger_prices);
-  if (!syms.length) return (e.symbols || []).join(", ");
-  return syms.map((s, i) => px[i] ? `${s}@${px[i]}` : s).join(", "); }
+  let syms = list(p.stocks ?? p.symbol); const px = list(p.trigger_prices);
+  if (!syms.length) syms = (e.symbols || []).map(String);
+  const box = document.createElement("div"); box.className = "chips";
+  syms.forEach((sym, i) => { const c = document.createElement("span"); c.className = "chip"; c.append(sym);
+    if (px[i] && syms.length === list(p.stocks ?? p.symbol).length) { const v = document.createElement("i"); v.textContent = "@" + px[i]; c.append(v); }
+    box.append(c); });
+  return box; }
 function paintAlerts(data) {  // alerts received (newest first), each with its raw JSON
   const t = $("alertsTbl"); t.textContent = ""; const al = data.filter(e => e.event === "alert");
   if (!al.length) { t.append(row(["No webhook alerts received on this day."])); return; }
@@ -707,7 +1062,7 @@ function paintAlerts(data) {  // alerts received (newest first), each with its r
     const jb = document.createElement("button"); jb.textContent = "JSON"; jb.style.padding = "2px 8px";
     jb.onclick = () => showBox("Webhook JSON", (e.payload !== undefined ? "" : "(webhook JSON not recorded for this alert; showing what was logged)\n") +
       JSON.stringify(e.payload !== undefined ? e.payload : {scan: e.scan, symbols: e.symbols}, null, 2));
-    t.append(row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.scan, alertSymbols(e), jb])); } }
+    const tr = row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.scan, alertSymbols(e), jb]); markRow(tr, e); t.append(tr); } }
 $("perfClose").onclick = () => $("perfModal").classList.add("hidden");
 $("perfModal").onclick = e => { if (e.target === $("perfModal")) $("perfModal").classList.add("hidden"); };
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("perfModal").classList.add("hidden"); });
@@ -729,15 +1084,19 @@ function applyMode(m) { $("tgBroker").checked = m.oauth; $("tgDat").checked = m.
   if (bm === activeBroker) $("brokerLogin").disabled = !m.oauth && !loginFirst; }
 let loginFirst = false;  // broker whose API key can only be proven by logging in: Log in works before the toggle is on
 let tokExp = 0, tokIss = 0;
-function paintTok() {
-  const left = tokExp - Date.now() / 1000, total = Math.max(1, tokExp - tokIss), f = $("tokfill");
-  if (left <= 0) { f.style.width = "0"; $("toktxt").textContent = "No valid token"; return; }
+function barColor(left) {  // one scale for every progress bar, by how much is LEFT: 0-20% red, 20-40% orange, 40-70% yellow, 70-100% green
+  return left < 20 ? "var(--neg)" : left < 40 ? "var(--orn)" : left < 70 ? "var(--warn)" : "var(--pos)"; }
+function tokInfo() {  // the login token's state: how full the bar is, its text and colour (shared by the Home bar and the limits window)
+  if (brokerDown) return {frac: 0, text: "No connection"};
+  if (tokExpired) return {frac: 0, text: "Token expired", bad: true};
+  const left = tokExp - Date.now() / 1000, total = Math.max(1, tokExp - tokIss);
+  if (left <= 0) return {frac: 0, text: "No valid token", bad: true};
   const frac = Math.min(1, left / total), h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60);
-  f.style.width = (frac * 100) + "%"; f.style.background = frac > .5 ? "#0b6" : frac > .2 ? "#e9a100" : "#d33";
-  $("toktxt").textContent = h + "h " + m + "m left"; }
+  return {frac, text: h + "h " + m + "m left", color: barColor(frac * 100)}; }
+function paintTok() { const t = tokInfo(), f = $("tokfill"); $("tokbar").classList.toggle("empty", t.frac <= 0 && hasBrokers && (tokLoaded || tokExpired || brokerDown)); f.style.width = (t.frac * 100) + "%"; if (t.color) f.style.background = t.color; $("toktxt").textContent = t.text; $("toktxt").style.color = t.bad ? "var(--neg)" : ""; paintRenew(); }
 setInterval(paintTok, 30000);
 async function loadBrokerTok() { const r = await api("auth/status", undefined, activeBroker); if (!r.ok) return false;
-  tokExp = r.data.valid ? r.data.expiry : 0; tokIss = r.data.issued || (tokExp - 86400); tokValid = !!r.data.valid; paintTok(); paintHeaderBroker(); return r.data.valid; }
+  tokLoaded = true; tokExp = r.data.valid ? r.data.expiry : 0; tokIss = r.data.issued || (tokExp - 86400); tokValid = !!r.data.valid; try { localStorage.setItem("flashTokValid", tokValid ? "1" : ""); } catch {} paintTok(); paintHeaderBroker(); return r.data.valid; }
 async function startLogin(name, msgEl) {
   const r = await api("auth/login", {}, name);
   if (!r.ok) return msg(msgEl, r.data.error || "failed", false);
@@ -747,7 +1106,7 @@ async function startLogin(name, msgEl) {
     if (s.ok && s.data.valid) { clearInterval(t); msgEl.textContent = ""; if (name === activeBroker) { loadBrokerTok(); refresh(); }
       if (bm === name) { loadVerified(); api("brokers").then(x => x.ok && paintBmBadge(x.data.added.find(y => y.name === name))); } loadBrokers(); } }, 3000);
   setTimeout(() => clearInterval(t), 600000); }
-$("brokerLogin").onclick = () => startLogin(activeBroker, $("brokerListMsg"));
+$("brokerLogin").onclick = () => startLogin(activeBroker, $("limMsg"));
 $("brokerLogin2").onclick = () => startLogin(bm, $("brokerMsg"));
 async function loadAuthInfo() {  // labels and which credential sections apply to the broker in the details window
   const r = await api("auth"); if (!r.ok) return; const d = r.data, has = k => d.kinds.includes(k);
@@ -758,19 +1117,31 @@ async function loadAuthInfo() {  // labels and which credential sections apply t
   $("tgBroker").closest("section").classList.toggle("hidden", !has("oauth"));
   $("tgDat").closest("section").classList.toggle("hidden", !has("token")); loadMode(); }
 let hasBrokers = false;
+let brokerDown = false, tokExpired = false;  // the last broker call could not reach the broker / the broker said the login token is no longer valid
+function setConn(r) { const d = !r.ok && !!(r.data && r.data.unreachable), x = r.ok ? false : (r.data && r.data.token_invalid) ? true : tokExpired;
+  if (d !== brokerDown || x !== tokExpired) { brokerDown = d; tokExpired = x; paintTok(); paintHeaderBroker(); } }
 let tokValid = false;
+let tokLoaded = false;  // the login state has been read at least once (until then "no token" just means "not loaded yet")
+function paintRenew() {  // the Renew token button shows only when the login is expired (or nearly: under 20% of its life left)
+  const t = tokInfo(); $("brokerLogin").classList.toggle("hidden", !hasBrokers || !(tokLoaded || tokExpired) || !(t.bad || t.frac <= 0.2)); }
 function paintHeaderBroker() {  // login button and token bar only make sense once a broker has been added
-  $("brokerLogin").classList.toggle("hidden", !hasBrokers); if (!hasBrokers) $("tokbox").classList.add("hidden");
+  paintRenew(); if (!hasBrokers) $("tokbox").classList.add("hidden");
   $("statBroker").textContent = hasBrokers ? (statName || activeBroker) : "none added";
-  $("statLogin").textContent = !hasBrokers ? "-" : tokValid ? "Logged in" : "Not logged in";
-  $("statDot").style.background = !hasBrokers ? "#888" : tokValid ? "#0b6" : "#d33"; }
+  $("statLogin").textContent = !hasBrokers ? "-" : brokerDown ? "No connection" : tokExpired ? "Token expired" : tokValid ? "Logged in" : "Not logged in";
+  $("statDot").style.background = !hasBrokers ? "#888" : brokerDown ? "#e9a100" : tokExpired ? "#d33" : tokValid ? "#0b6" : "#d33"; }
 let statName = "";
 async function loadActiveInfo() {  // header labels for the active broker
-  paintHeaderBroker(); if (!hasBrokers) return;
+  paintHeaderBroker(); if (!hasBrokers) return saveCard();
   const r = await api("auth", undefined, activeBroker); if (!r.ok) return;
-  statName = r.data.display_name; paintHeaderBroker(); $("brokerLogin").textContent = "Log in to " + r.data.display_name; $("tokbox").title = r.data.display_name + " login token expiry";
+  statName = r.data.display_name; paintHeaderBroker(); $("brokerLogin").textContent = "Renew token"; $("tokbox").title = r.data.display_name + " login token expiry";
   $("tokbox").classList.toggle("hidden", !r.data.kinds.includes("oauth"));
-  const m = await api("auth/mode", undefined, activeBroker); if (m.ok) $("brokerLogin").disabled = !m.data.oauth && !r.data.login_first; }
+  const m = await api("auth/mode", undefined, activeBroker); if (m.ok) $("brokerLogin").disabled = !m.data.oauth && !r.data.login_first;
+  saveCard(r.data.kinds.includes("oauth"), m.ok && $("brokerLogin").disabled); }
+// The broker card is drawn from the last known state at start-up, so it does not resize when the real state arrives.
+function saveCard(oauth = false, dis = false) { try { localStorage.setItem("flashCard", JSON.stringify({has: hasBrokers, name: statName, oauth, dis})); } catch {} }
+try { const c = JSON.parse(localStorage.getItem("flashCard") || "null");
+  if (c) { hasBrokers = !!c.has; statName = c.name || ""; tokValid = !!localStorage.getItem("flashTokValid"); paintHeaderBroker();
+    if (hasBrokers) { $("brokerLogin").textContent = "Renew token"; $("brokerLogin").disabled = !!c.dis; $("tokbox").classList.toggle("hidden", !c.oauth); } } } catch {}
 async function loadBrokers() {
   const r = await api("brokers"); if (!r.ok) return; activeBroker = r.data.active;
   const had = hasBrokers; hasBrokers = r.data.added.length > 0; paintHeaderBroker(); if (hasBrokers !== had) { loadActiveInfo(); loadFunds(); }
@@ -814,7 +1185,7 @@ async function openBroker(name) {
   const info = (await api("brokers")).data, me = info.added.find(b => b.name === name);
   paintBmBadge(me);
   $("brokerModal").classList.remove("hidden");
-  await Promise.all([loadAuthInfo(), loadConfig(), loadBroker(), loadDtok(), loadMode(), loadVerified()]); }
+  $("instMsg").textContent = ""; await Promise.all([loadInstruments(), loadAuthInfo(), loadConfig(), loadBroker(), loadDtok(), loadMode(), loadVerified()]); }
 async function dropIfUnlisted(name) {  // closed without verifying: it was never added, so erase what was typed in
   const x = await api("brokers"); if (x.ok && !x.data.added.some(b => b.name === name)) { await api("brokers/remove", {name}); loadBrokers(); } }
 function closeBroker() { const name = bm; $("brokerModal").classList.add("hidden"); bm = ""; if (name) dropIfUnlisted(name); loadBrokers(); loadActiveInfo(); loadBrokerTok(); }
@@ -847,40 +1218,59 @@ $("ripBtn").onclick = () => loadIp(true);
 
 // ---- sound on new webhook alert: poll the newest alert id, beep when it changes ----
 const SND_ON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
-let soundOn = true, actx = null, lastAlert = null;
+let soundOn = true, actx = null, lastAlert = null, lastLog = null;
 try { soundOn = localStorage.getItem("sound") !== "off"; } catch (e) {}
-function paintSound() { $("sound").innerHTML = SND_ON; $("soundSel").value = soundOn ? "on" : "off"; }
-function beep() {  // loud alert: three rising two-tone pings, square wave at near-full volume (the audio context needs a prior click/key press)
+const SND_OFF = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path d="M2 2l20 20"/></svg>';
+function paintSound() {  // top-bar speaker: on = waves, muted = cross; also keeps the Settings select in step
+  const b = $("sound"); b.innerHTML = soundOn ? SND_ON : SND_OFF; $("soundSel").value = soundOn ? "on" : "off";
+  b.title = soundOn ? "Mute alert sound" : "Unmute alert sound"; b.setAttribute("aria-label", b.title); b.setAttribute("aria-pressed", String(!soundOn)); b.style.color = soundOn ? "" : "var(--neg)"; }
+function beep() {  // one loud beep (square wave, near-full volume); the audio context needs a prior click/key press
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") actx.resume();
-    const out = actx.createDynamicsCompressor(); out.connect(actx.destination);  // keeps the loud tones from clipping
-    const t0 = actx.currentTime + 0.05;
-    for (let k = 0; k < 3; k++) [988, 1319].forEach((f, i) => {
-      const o = actx.createOscillator(), g = actx.createGain(), t = t0 + k * 0.55 + i * 0.22;
-      o.type = "square"; o.frequency.value = f; o.connect(g); g.connect(out);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.01); g.gain.setValueAtTime(0.9, t + 0.16); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-      o.start(t); o.stop(t + 0.21); });
+    const out = actx.createDynamicsCompressor(); out.connect(actx.destination);  // keeps the loud tone from clipping
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + 0.05;
+    o.type = "square"; o.frequency.value = 1319; o.connect(g); g.connect(out);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.01); g.gain.setValueAtTime(0.9, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+    o.start(t); o.stop(t + 0.4);
   } catch (e) {}
 }
-$("sound").onclick = beep;  // top-bar button: play the alert sound as a test, whatever the setting
+$("sound").onclick = () => {  // top-bar speaker: click to mute, click again to unmute (a short beep confirms unmuting)
+  soundOn = !soundOn; try { localStorage.setItem("sound", soundOn ? "on" : "off"); } catch (e) {} paintSound(); if (soundOn) beep(); };
 $("soundSel").addEventListener("change", e => e.stopPropagation());  // not part of the Save form
-$("soundSel").onchange = () => { soundOn = $("soundSel").value === "on"; try { localStorage.setItem("sound", soundOn ? "on" : "off"); } catch (e) {} };
+$("soundSel").onchange = () => { soundOn = $("soundSel").value === "on"; try { localStorage.setItem("sound", soundOn ? "on" : "off"); } catch (e) {} paintSound(); };
 for (const ev of ["click", "keydown"]) document.addEventListener(ev, () => { if (soundOn && !actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } }, {once: false});
 paintSound();
+const seen = {alerts: null, logs: null};  // newest alert id each tab has shown; the tab's badge counts alerts after it
+try { for (const k in seen) { const v = localStorage.getItem("seen_" + k); if (v !== null && !isNaN(v)) seen[k] = Number(v); } } catch (e) {}
+function paintDot(k, n) { const d = $("dot_" + k); if (!d) return; d.textContent = n > 99 ? "99+" : n; d.classList.toggle("hidden", !n); d.title = n + " new alert" + (n === 1 ? "" : "s"); }
+function markSeen(k) { if (!(k in seen) || lastAlert === null) return; seen[k] = lastAlert; try { localStorage.setItem("seen_" + k, lastAlert); } catch (e) {} paintDot(k, 0); }
 async function pollAlert() {
-  const r = await api("auto/alert/latest"); if (!r.ok) return;
-  if (lastAlert !== null && r.data.id > lastAlert) {  // a new alert arrived since the last poll
-    if (soundOn) beep();
-    if (!$("app").classList.contains("hidden") && $("logDay").selectedIndex <= 0) loadLogDays().then(loadAutoLog);
-  }
-  lastAlert = r.data.id;
+  const q = Object.keys(seen).filter(k => seen[k] !== null).map(k => `since_${k}=${seen[k]}`).join("&");
+  const r = await api("auto/alert/latest" + (q ? "?" + q : "")); if (!r.ok) return;
+  const prev = lastAlert, prevLog = lastLog; lastAlert = r.data.id; lastLog = r.data.log;
+  for (const k in seen) {
+    if (seen[k] === null || seen[k] > r.data.id) { seen[k] = r.data.id; try { localStorage.setItem("seen_" + k, r.data.id); } catch (e) {} }  // first run, or the log was reset
+    if (!document.hidden && $("mainView").dataset.p === k && $("accountView").classList.contains("hidden")) markSeen(k);  // already looking at it
+    else paintDot(k, r.data["new_" + k] || 0); }
+  if (prev !== null && r.data.id > prev && soundOn) beep();  // a new alert arrived since the last poll
+  if (prevLog !== null && r.data.log > prevLog && !$("app").classList.contains("hidden") && $("logDay").selectedIndex <= 0)
+    loadLogDays().then(loadAutoLog);  // any new log entry (alert, exit, TP/SL, timeout) refreshes today's lists
 }
-setInterval(() => { if (!$("app").classList.contains("hidden")) pollAlert(); }, 5000);
+setInterval(() => { if (!document.hidden && !$("app").classList.contains("hidden")) pollAlert(); }, 5000);  // no polling while the tab is in the background
+// Auto-refresh the page being looked at (Alerts and Logs already update from the alert poll above). Paused while the tab is in the
+// background, the Account page is open, or a dialog is open, so it never disturbs typing or a form being edited.
+const AUTO_REFRESH = {home: [3, () => { loadBrokerTok(); loadFunds(); loadToday(); }], positions: [10, loadPositions], orders: [10, loadOrders]};  // page: [seconds, loader]
+let autoLast = {};
+setInterval(() => {
+  if (document.hidden || $("app").classList.contains("hidden") || !$("accountView").classList.contains("hidden") || document.querySelector(".ovl:not(.hidden):not(#modal)") || getComputedStyle($("modal")).display !== "none") return;
+  const p = $("mainView").dataset.p, a = AUTO_REFRESH[p]; if (!a || Date.now() - (autoLast[p] || 0) < a[0] * 1000 - 500) return;
+  autoLast[p] = Date.now(); a[1](); }, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("app").classList.contains("hidden")) pollAlert(); });  // catch up (and beep) as soon as the tab is back
 
 async function start() {
   const r = await api("limits"); if (!r.ok) return showLogin();
-  $("login").classList.add("hidden"); $("lockPage").className = "hidden"; unlockAcked = false; $("app").classList.remove("hidden"); loadLimits(); loadInstruments(); loadAuto(); loadBrokers().then(() => { loadActiveInfo(); loadBrokerTok(); }); loadIp(); loadLogDays().then(loadAutoLog); refresh(); pollAlert();
+  $("login").classList.add("hidden"); $("lockPage").className = "hidden"; unlockAcked = false; $("app").classList.remove("hidden"); applyHash(); loadLimits(); loadAuto(); loadBrokers().then(() => { loadActiveInfo(); loadBrokerTok(); }); loadIp(); loadLogDays().then(loadAutoLog); refresh(); pollAlert();
 }
 start();
 </script>

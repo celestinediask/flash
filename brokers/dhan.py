@@ -73,6 +73,7 @@ class DhanBroker(Broker):
     supports_super_orders = True
     supports_postback = True
     instrument_file = "scrip-master.csv"
+    token_msg = TOKEN_MSG
 
     def __init__(self, config=None, token_provider=None):
         super().__init__(config, token_provider)
@@ -86,7 +87,7 @@ class DhanBroker(Broker):
     def request(self, method, path, token=None, **kw):
         token = token or self.token_provider()
         if not token:
-            return 502, {"error": TOKEN_MSG, "token_invalid": True}
+            return 502, {"error": self.token_msg, "token_invalid": True}
         headers = {"access-token": token, "client-id": self.client_id,
                    "Content-Type": "application/json", "Accept": "application/json"}
         r = requests.request(method, self.base + path, headers=headers, timeout=10, **kw)
@@ -97,7 +98,7 @@ class DhanBroker(Broker):
         if r.status_code == 401:
             # Token rejected. Never relay 401: the UI treats it as "logged out".
             why = " ".join(str(body.get(k, "")) for k in ("errorCode", "errorMessage") if isinstance(body, dict)).strip()
-            return 502, {"error": TOKEN_MSG, "token_invalid": True, "detail": why}
+            return 502, {"error": self.token_msg, "token_invalid": True, "detail": why}
         return r.status_code, body
 
     def _list(self, code, body, conv):
