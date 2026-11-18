@@ -132,18 +132,10 @@
   .hero .lbl { font-size: 13px; color: var(--mut); }
   .hero #bal { display: block; margin-top: 2px; font-size: 30px; font-weight: 700; overflow-wrap: anywhere; }
   .list { padding: 0 16px !important; }
-  #limCards { display: contents; }  /* one card per webhook, placed straight into Home's grid */
-  .limCard { display: grid; gap: 14px; }
-  .limCard h3 { margin: 0; font-size: 13px; color: var(--mut); font-weight: 600; }
-  .limCard .stepRow { margin-bottom: 6px; } .limCard .stepRow .nm { font-size: 14px; font-weight: 600; }
-  .limCard .lbar i { transition: width .25s; }
   /* an empty bar (nothing left, or no valid token) fades in and out in red to catch the eye */
   @keyframes emptyBlink { 0%, 100% { background: var(--sf2); } 50% { background: var(--neg); } }
   .lbar.empty, #tokbar.empty { animation: emptyBlink 1.4s ease-in-out infinite; }
   @media (prefers-reduced-motion: reduce) { .lbar.empty, #tokbar.empty { animation: none; background: var(--neg); } }
-  .limCard .lbar { display: block; height: 6px; border-radius: 3px; background: var(--sf2); overflow: hidden; }
-  .limCard .lbar i { display: block; height: 100%; background: var(--pos); }
-  .limCard .lbar i.warn { background: var(--warn); } .limCard .lbar i.bad { background: var(--neg); }
   .stepRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .stepper { display: flex; align-items: center; gap: 10px; } .stepper .stepVal { min-width: 76px; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
   .stepper button { width: 36px; height: 36px; min-height: 0; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
@@ -168,6 +160,7 @@
   #statDot { width: 8px; height: 8px; border-radius: 50%; background: var(--mut); display: inline-block; flex: none; }
   #tokbox { display: grid; gap: 6px; font-size: 13px; color: var(--mut); }
   #tokbox .trow { display: flex; justify-content: space-between; gap: 8px; } #tokbox .trow b { font-weight: 600; color: var(--fg); }
+  #bal .renewBal { min-height: 0; height: auto; padding: 0; border: 0; background: none; color: var(--neg); font: inherit; font-weight: 700; }
   #tokbar { display: block; height: 6px; border-radius: 3px; background: var(--sf2); overflow: hidden; }
   #tokfill { display: block; height: 100%; width: 0; transition: width .5s; }
 
@@ -379,7 +372,6 @@
         <div class="msg" id="limMsg"></div>
       </div>
     </div>
-    <div id="limCards"></div>
     <div class="card list hidden" id="notices"></div>
   </section>
   <section data-pg="alerts">
@@ -788,47 +780,17 @@ function paintNotices() {  // important messages: red for a problem, amber for a
   const nb = $("notices"); nb.textContent = "";
   for (const n of noteList) { const e = document.createElement("div"); e.className = "note" + (n.level === "bad" ? " bad" : ""); e.textContent = n.text; nb.append(e); }
   nb.classList.toggle("hidden", !noteList.length); }
-let limitList = [], limTouched = 0;  // limTouched: when a +/- was last tapped (the 3-second refresh leaves the card alone for a moment after)
-const MINUS_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>';
-const PLUS_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
-function paintLimits(list, placeholder = false) {  // the limits: name, a - / + stepper holding today's limit, and a bar of how much is LEFT
-  if (!placeholder && Date.now() - limTouched < 4000) return;  // just tapped: do not redraw under the user's finger
-  if (!placeholder) limitList = list; const wrap = $("limCards"); wrap.textContent = "";  // placeholder: field names only, values still "-" (drawn before the data arrives)
-  const money = v => "₹" + Number(v).toLocaleString("en-IN", {maximumFractionDigits: 0});
-  for (const h of list) {
-    const box = document.createElement("div"); box.className = "card limCard"; wrap.append(box);  // each webhook has its own limits, so each gets its own card
-    const t = document.createElement("h3"); t.textContent = h.name ? h.name + " - today's limits" : "Today's limits"; box.append(t);
-    for (const b of h.bars) { const none = b.used == null, fmt = v => b.money ? money(v) : String(v), d = document.createElement("div");
-      const row = document.createElement("div"); row.className = "stepRow";
-      const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = b.label;
-      const st = document.createElement("div"); st.className = "stepper"; const val = document.createElement("b"); val.className = "stepVal";
-      const bar = document.createElement("span"); bar.className = "lbar"; const f = document.createElement("i"); bar.append(f);
-      let minus;
-      const show = () => { const pct = none ? 0 : b.max > 0 ? Math.min(100, b.used / b.max * 100) : 100;
-        val.textContent = none ? "-" : fmt(b.max); const left = none ? 0 : 100 - pct; f.style.width = left + "%"; f.style.background = none ? "" : barColor(left);
-        bar.classList.toggle("empty", !none && left <= 0); bar.style.animationDelay = -(Date.now() % 1400) + "ms";  // same phase after each redraw, so it does not restart  // the bar shows what is LEFT, like the token bar
-        if (minus) minus.disabled = none || b.max - b.step < 0; };
-      const mk = (svg, sign, label) => { const x = document.createElement("button"); x.innerHTML = svg; x.title = label; x.setAttribute("aria-label", label + " " + b.label);
-        x.onclick = () => {  // changes on screen at once; the request follows in the background and the change is undone if it fails
-          const delta = sign * b.step; if (none || b.max + delta < 0) return; limTouched = Date.now();
-          b.max += delta; b.extra = (b.extra || 0) + delta; show();
-          api(`webhooks/${h.id}/extend`, {what: b.key, amount: delta}).then(r => { limTouched = Date.now(); if (r.ok) return;
-            b.max -= delta; b.extra -= delta; show(); msg($("hookMsg"), r.data.error || "failed", false); }); };
-        return x; };
-      minus = mk(MINUS_SVG, -1, "Lower by " + (none ? "" : fmt(b.step))); const plus = mk(PLUS_SVG, 1, "Raise by " + (none ? "" : fmt(b.step))); plus.disabled = none;
-      st.append(minus, val, plus); row.append(nm, st); show(); d.append(row, bar); box.append(d); } }
-  if (!placeholder) { try { localStorage.setItem("flashLimits", JSON.stringify(list.map(h => ({id: h.id, name: h.name, bars: h.bars.map(b => ({label: b.label, key: b.key, money: b.money, step: b.step}))})))); } catch {} } }
-(function () {  // first paint: the field names from last time (or the standard four), so the card is full height before the data comes in
-  let c = null; try { c = JSON.parse(localStorage.getItem("flashLimits") || "null"); } catch {}
-  if (!Array.isArray(c)) c = [{name: "", bars: ["Daily trades", "Daily capital", "Open positions", "Daily loss"].map(label => ({label}))}];
-  paintLimits(c, true); })();
 async function loadToday() { const r = await api("today"); if (!r.ok) return; const d = r.data, v = x => x == null ? "-" : x;
-  paintLimits(d.limits || []); noteList = d.notices || []; paintNotices();
+  noteList = d.notices || []; paintNotices();
   $("tAlerts").textContent = d.alerts; $("tOrders").textContent = v(d.orders);
   $("tProfit").textContent = d.profit == null ? "-" : "₹" + d.profit; $("tLoss").textContent = d.loss == null ? "-" : "₹" + d.loss;
   $("tNet").textContent = d.net == null ? "-" : (d.net < 0 ? "-₹" + -d.net : "₹" + d.net); $("tNet").style.color = d.net > 0 ? "var(--pos)" : d.net < 0 ? "var(--neg)" : ""; }
 async function loadFunds() { if (!hasBrokers) { $("bal").textContent = "-"; return; }
-  const r = await api("funds"); setConn(r); $("bal").textContent = r.ok ? "₹" + r.data.available : r.data.token_invalid ? "log in again" : "unavailable"; }
+  const r = await api("funds"); setConn(r); const b = $("bal");
+  if (r.ok) return b.textContent = "₹" + r.data.available;
+  if (!r.data.token_invalid) return b.textContent = "unavailable";
+  const x = document.createElement("button"); x.type = "button"; x.className = "renewBal"; x.textContent = "Renew token";
+  x.onclick = () => startLogin(activeBroker, null); b.replaceChildren(x); }
 async function loadLimits() { const r = await api("limits"); if (!r.ok) return;
   $("maxCap").value = r.data.max_capital; $("enabled").value = String(r.data.trading_enabled);
   markSaved($("saveLimits")); }
@@ -1097,16 +1059,16 @@ function paintTok() { const t = tokInfo(), f = $("tokfill"); $("tokbar").classLi
 setInterval(paintTok, 30000);
 async function loadBrokerTok() { const r = await api("auth/status", undefined, activeBroker); if (!r.ok) return false;
   tokLoaded = true; tokExp = r.data.valid ? r.data.expiry : 0; tokIss = r.data.issued || (tokExp - 86400); tokValid = !!r.data.valid; try { localStorage.setItem("flashTokValid", tokValid ? "1" : ""); } catch {} paintTok(); paintHeaderBroker(); return r.data.valid; }
-async function startLogin(name, msgEl) {
+async function startLogin(name, msgEl) {  // msgEl: where a message goes; null on Home (errors then go to the toast, nothing else is shown)
   const r = await api("auth/login", {}, name);
-  if (!r.ok) return msg(msgEl, r.data.error || "failed", false);
-  window.open(r.data.url, "_blank", "noopener"); msg(msgEl, "Log in on the broker tab, then come back here.", true);
+  if (!r.ok) return msgEl ? msg(msgEl, r.data.error || "failed", false) : toast(r.data.error || "failed");
+  window.open(r.data.url, "_blank", "noopener"); if (msgEl) msg(msgEl, "Log in on the broker tab, then come back here.", true);
   const t = setInterval(async () => {
     const s = await api("auth/status", undefined, name);
-    if (s.ok && s.data.valid) { clearInterval(t); msgEl.textContent = ""; if (name === activeBroker) { loadBrokerTok(); refresh(); }
+    if (s.ok && s.data.valid) { clearInterval(t); if (msgEl) msgEl.textContent = ""; if (name === activeBroker) { loadBrokerTok(); refresh(); }
       if (bm === name) { loadVerified(); api("brokers").then(x => x.ok && paintBmBadge(x.data.added.find(y => y.name === name))); } loadBrokers(); } }, 3000);
   setTimeout(() => clearInterval(t), 600000); }
-$("brokerLogin").onclick = () => startLogin(activeBroker, $("limMsg"));
+$("brokerLogin").onclick = () => startLogin(activeBroker, null);
 $("brokerLogin2").onclick = () => startLogin(bm, $("brokerMsg"));
 async function loadAuthInfo() {  // labels and which credential sections apply to the broker in the details window
   const r = await api("auth"); if (!r.ok) return; const d = r.data, has = k => d.kinds.includes(k);
@@ -1122,8 +1084,8 @@ function setConn(r) { const d = !r.ok && !!(r.data && r.data.unreachable), x = r
   if (d !== brokerDown || x !== tokExpired) { brokerDown = d; tokExpired = x; paintTok(); paintHeaderBroker(); } }
 let tokValid = false;
 let tokLoaded = false;  // the login state has been read at least once (until then "no token" just means "not loaded yet")
-function paintRenew() {  // the Renew token button shows only when the login is expired (or nearly: under 20% of its life left)
-  const t = tokInfo(); $("brokerLogin").classList.toggle("hidden", !hasBrokers || !(tokLoaded || tokExpired) || !(t.bad || t.frac <= 0.2)); }
+function paintRenew() {  // the Renew token button is always shown once a broker is added (same on every state)
+  $("brokerLogin").classList.toggle("hidden", !hasBrokers); }
 function paintHeaderBroker() {  // login button and token bar only make sense once a broker has been added
   paintRenew(); if (!hasBrokers) $("tokbox").classList.add("hidden");
   $("statBroker").textContent = hasBrokers ? (statName || activeBroker) : "none added";
