@@ -185,7 +185,7 @@
   #alertsTbl td[data-label="Time"]::before, #autoLog td[data-label="Time"]::before, #orders td[data-label="Time"]::before, #positions td[data-label="P&L %"]::before, #hookTable td[data-label="Status"]::before,
   td[data-label]:has(> button)::before { display: none; }
   #alertsTbl td[data-label="Time"], #autoLog td[data-label="Time"], #orders td[data-label="Time"] { font-size: 13px; font-weight: 400; color: var(--mut); }
-  #positions td[data-label="P&L %"] { font-size: 16px; font-weight: 600; }
+  #positions td[data-label="P&L %"] { font-size: 16px; font-weight: 400; }
   #hookTable td[data-s="ok"] { background: var(--pos-bg) !important; color: var(--pos) !important; }
   #hookTable td[data-s="bad"] { background: var(--neg-bg) !important; color: var(--neg) !important; }
   #hookTable td[data-s="warn"] { background: rgba(227,179,65,.16) !important; color: var(--warn) !important; }
@@ -195,6 +195,14 @@
   #alertsTbl td[data-label="Scan"], #autoLog td[data-label="Scan"] { grid-column: 1 / 3; grid-row: 3; }
   #alertsTbl td[data-label="JSON"], #autoLog td[data-label="Details"] { grid-row: 3; }
   #autoLog td[data-label="Mode"] { text-transform: uppercase; } #autoLog td[data-label="Mode"]::before { text-transform: none; }
+  #positions td[data-label="Symbol"], #orders td[data-label="Symbol"] { grid-column: 1; }  /* title left, Mode over the middle column, time / P&L % right: all on the top row */
+  #positions td[data-label="Mode"], #orders td[data-label="Mode"] { grid-column: 2; grid-row: 1; justify-self: start; align-self: center; font-size: 13px; font-weight: 600; }  /* lines up with the second column of fields below */
+  #positions td[data-label="Symbol"] { align-self: center; }
+  #positions .ibtn { width: 26px; height: 26px; border-radius: 6px; }
+  #positions .ibtn svg { width: 12px; height: 12px; flex: none; }
+  #positions td[data-label="P&L %"] { display: flex; justify-self: stretch; align-items: center; justify-content: flex-start; gap: 10px; text-align: left; }  /* % lines up with the fields below */
+  #positions td[data-label="P&L %"] .ibtn { margin-left: auto; }  /* the % and the exit button share the top-right corner */
+  #positions td[data-label="Mode"]::before, #orders td[data-label="Mode"]::before { display: none; }
   #orders td[data-label="Status"] { grid-column: 2 / -1; }
   #orders td[data-label=""] { grid-column: 1 / -1; }
   #hookTable td[data-label=""] { grid-column: 1 / -1; padding-top: 12px; border-top: 1px solid var(--bd); }
@@ -202,6 +210,13 @@
   td[style*="rgb(0, 187, 102)"] { color: var(--pos) !important; } td[style*="rgb(221, 51, 51)"] { color: var(--neg) !important; }
   #tokfill[style*="rgb(0, 187, 102)"], #statDot[style*="rgb(0, 187, 102)"] { background: var(--pos) !important; }
   #tokfill[style*="rgb(221, 51, 51)"], #statDot[style*="rgb(221, 51, 51)"] { background: var(--neg) !important; }
+  .sw { flex: none; width: 40px; height: 22px; min-height: 0; padding: 0; position: relative; border-radius: 11px; border: 1px solid var(--bd); background: var(--sf2); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--mut); transition: transform .15s, background .15s; }
+  .sw[aria-checked="true"] { background: var(--pos-bg); border-color: var(--pos); }
+  .sw[aria-checked="true"]::after { transform: translateX(18px); background: var(--pos); }
+  #hookTable > tr { position: relative; }
+  #hookTable > tr > .sw { position: absolute; top: 15px; right: 14px; }
+  #hookTable td[data-label="Status"] { margin-right: 50px; }  /* room for the switch in the corner */
   #hookTable tr.sel { border-color: var(--acc); }
   .racts { display: flex; gap: 8px; }
   .racts .ibtn { flex: 1; width: auto; height: 40px; }
@@ -243,7 +258,14 @@
   #jsonModal .sheet { height: min(480px, 80%); max-height: none; border: 1px solid var(--bd); border-radius: 16px; padding-bottom: 16px; overflow: hidden; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; background: var(--sf2); border: 1px solid var(--bd); font-size: 13px; font-weight: 600; }
-  .chip i { font-style: normal; font-weight: 400; color: var(--mut); }
+  .chip[role="button"] { cursor: pointer; }
+  @media (hover: hover) { .chip[role="button"]:hover { background: var(--bd); } }  /* mouse only, like the other hover styles */
+  .chip[role="button"]:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+  .chip-ok { color: var(--pos); }
+  .chip-bad { color: var(--neg); }
+  .chip-neu { color: var(--warn); }
+  .chip i { color: inherit; opacity: .75; }
+  .chip i { font-style: normal; font-weight: 400; }
   .urlrow { display: flex; align-items: center; gap: 6px; padding: 8px 4px 8px 12px; border-radius: 8px; background: var(--sf2); font-size: 12px; color: var(--mut); }
   .urlrow > span { flex: 1; min-width: 0; }
   .urlrow code { display: block; margin-top: 2px; color: var(--fg); font-size: 12px; }
@@ -257,6 +279,8 @@
   tr.hl-ok { --hl: var(--pos); } tr.hl-bad { --hl: var(--neg); } tr.hl-neu { --hl: var(--warn); }
   .perf { position: relative; }
   .perf .st { margin-bottom: 10px; font-size: 13px; color: var(--mut); } .perf .st b { color: var(--fg); }
+  #perfModal { align-items: center; }
+  #perfModal .sheet { border-radius: 16px; max-height: 80%; }
   .perf svg { display: block; width: 100%; height: auto; touch-action: none; } .perf text { fill: var(--mut); font-size: 13px; }
   .perf .tip { position: absolute; display: none; pointer-events: none; white-space: nowrap; padding: 4px 8px; border-radius: 6px; font-size: 12px; background: var(--fg); color: var(--bg); }
 
@@ -398,7 +422,7 @@
       <label class="full"><span>Name<span class="req">*</span></span> <input id="a_name" autocomplete="off"></label>
       <label><span>Automation<span class="req">*</span></span> <select id="a_enabled"><option value="false">Off</option><option value="true">On</option></select></label>
       <label><span>Side<span class="req">*</span></span> <select id="a_side"><option>BUY</option><option>SELL</option></select></label>
-      <label class="full"><span>Mode<span class="req">*</span></span> <select id="a_mode"><option value="dry">DEMO (log only)</option><option value="live">LIVE (real orders)</option></select></label>
+      <label class="full"><span>Mode<span class="req">*</span></span> <select id="a_mode"><option value="dry">PAPER (simulated orders)</option><option value="live">LIVE (real orders)</option></select></label>
       <label><span>Product<span class="req">*</span></span> <select id="a_product"><option>INTRADAY</option><option>CNC</option><option>MARGIN</option><option>MTF</option></select></label>
       <label id="lbl_limit_buffer"><span>Limit buffer %<span class="req">*</span></span> <input id="a_limit_buffer" inputmode="decimal" placeholder="0.3"></label>
       <label class="full"><span>Order method<span class="req">*</span></span> <select id="a_order_method"><option value="market">Market (cancel at timeout, no retry)</option><option value="market_resend">Market + cancel &amp; retry (up to 5 times)</option><option value="limit">Limit with buffer (one attempt, cancel at timeout)</option></select></label>
@@ -801,23 +825,33 @@ function shown(el, r) {  // a failed broker call is shown on its page, not left 
   setConn(r); el.textContent = ""; el.className = "msg";
   if (!r.ok || !Array.isArray(r.data)) { el.className = "msg err"; el.textContent = (r.data && r.data.error) || "Broker data unavailable"; return false; }
   return true; }
+function pnlCell(pct, p) { const d = document.createElement("span"); d.style.cssText = "display:contents"; d.append(pct); const b = exitBtn(p); if (b) d.append(b); return d; }
+function exitBtn(p) { if (!p.net_qty) return "";
+  const b = document.createElement("button"); b.className = "ibtn del"; b.title = "Exit position"; b.setAttribute("aria-label", "Exit " + p.symbol);
+  b.innerHTML = '<svg width="16" height="16" viewBox="4 4 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+  b.onclick = async () => { const paper = p.mode === "paper";
+    if (!confirm(`Exit ${p.symbol} (${paper ? "paper" : "LIVE"}, qty ${Math.abs(p.net_qty)}) at market?`)) return;
+    b.disabled = true; const c = await api("position/exit", paper ? {mode: "paper", id: p.id} : {mode: "live", symbol: p.symbol, product: p.product});
+    msg($("positionsMsg"), JSON.stringify(c.data), c.ok); loadPositions(); };
+  return b; }
+function modeTag(x) { const s = document.createElement("span"); const paper = x.mode === "paper"; s.textContent = paper ? "Paper" : "Live"; if (paper) s.style.color = "var(--warn)"; return s; }
 async function loadPositions() { const r = await api("positions"); const t = $("positions"); t.textContent = "";
   if (!shown($("positionsMsg"), r)) return;
-  t.append(row(["Symbol", "Product", "Net qty", "Buy avg", "Sell avg", "Realized", "Unrealized", "P&L %"], "th"));
+  t.append(row(["Symbol", "Mode", "Product", "Net qty", "Buy avg", "Sell avg", "Realized", "Unrealized", "P&L %"], "th"));
   for (const p of r.data) {  // % = total P&L over the capital traded (the larger of bought / sold value)
     const base = Math.max(p.buy_avg * p.buy_qty, p.sell_avg * p.sell_qty), pl = p.realized_pnl + p.unrealized_pnl;
     const pct = base > 0 ? (pl / base * 100).toFixed(2) + "%" : "";
-    const tr = row([p.symbol, p.product, p.net_qty, p.buy_avg, p.sell_avg, p.realized_pnl, p.unrealized_pnl, pct]);
-    for (const i of [5, 6]) { const v = i === 5 ? p.realized_pnl : p.unrealized_pnl; tr.children[i].style.color = v > 0 ? "var(--pos)" : v < 0 ? "var(--neg)" : ""; }  // Realized and Unrealized: green profit, red loss
+    const tr = row([p.symbol, modeTag(p), p.product, p.net_qty, p.buy_avg, p.sell_avg, p.realized_pnl, p.unrealized_pnl, pnlCell(pct, p)]);
+    for (const i of [6, 7]) { const v = i === 6 ? p.realized_pnl : p.unrealized_pnl; tr.children[i].style.color = v > 0 ? "var(--pos)" : v < 0 ? "var(--neg)" : ""; }  // Realized and Unrealized: green profit, red loss
     t.append(tr); } }
 async function loadOrders() { const r = await api("orders"); const t = $("orders"); t.textContent = "";
   if (!shown($("ordersMsg"), r)) return;
-  t.append(row(["Time", "Symbol", "Side", "Type", "Qty", "Price", "Status", ""], "th"));
+  t.append(row(["Time", "Symbol", "Mode", "Side", "Type", "Qty", "Price", "Status", ""], "th"));
   for (const o of r.data) {
-    const open = ["PENDING", "PARTIAL"].includes(o.status);
+    const open = o.mode !== "paper" && ["PENDING", "PARTIAL"].includes(o.status);
     const b = document.createElement("button"); b.textContent = "cancel";
     b.onclick = async () => { const c = await api("cancel", {order_id: o.order_id}); msg($("ordersMsg"), JSON.stringify(c.data), c.ok); loadOrders(); };
-    t.append(row([(o.time || "").slice(11), o.symbol, o.side, o.order_type, o.qty, o.price, o.status + (o.message ? " - " + o.message : ""), open ? b : ""])); } }
+    t.append(row([(o.time || "").slice(11), o.symbol, modeTag(o), o.side, o.order_type, o.qty, o.price, o.status + (o.message ? " - " + o.message : ""), open ? b : ""])); } }
 $("rp").onclick = loadPositions; $("ro").onclick = loadOrders;
 $("rh").onclick = () => { loadBrokerTok(); loadAuto(); };  // webhooks and the login state their status depends on
 $("rs").onclick = () => { loadBrokerTok(); loadFunds(); loadToday(); };
@@ -849,25 +883,27 @@ async function openPerf(h) { const box = $("perfBody"); box.textContent = "Loadi
   st.querySelector("b").textContent = rs(d.total); st.querySelector("b").style.color = d.total > 0 ? "var(--pos)" : d.total < 0 ? "var(--neg)" : "";
   card.append(st);
   if (!d.points.length) { const m = document.createElement("div"); m.className = "st"; m.textContent = "No closed trades yet."; card.append(m); }
-  else drawPerf(card, d.points);
+  else drawPerf(card, d.points, d.total);
   box.append(card); }
-function drawPerf(card, pts) {  // cumulative realised P&L by day, zero baseline, hover for the day's numbers
-  const W = 600, H = 150, L = 44, R = 10, T = 8, B = 20, series = [{date: "start", pnl: 0, cum: 0}, ...pts];
+function drawPerf(card, trades, total) {  // cumulative realised P&L, one step and dot per closed trade; green line in profit, red in loss
+  const W = 600, H = 150, L = 44, R = 10, T = 8, B = 20, series = [{date: "start", pnl: 0, cum: 0}, ...trades];
   const ys = series.map(p => p.cum), lo = Math.min(0, ...ys), hi = Math.max(0, ...ys), span = (hi - lo) || 1;
   const X = i => L + i / (series.length - 1) * (W - L - R), Y = v => T + (hi - v) / span * (H - T - B);
-  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Cumulative realised P&L by day"});
+  const color = total > 0 ? "var(--pos)" : total < 0 ? "var(--neg)" : "var(--mut)";
+  const svg = svgEl("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Cumulative realised P&L per trade"});
   const grid = v => { svgEl("line", {x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--bd)", "stroke-width": v === 0 ? 1.5 : 1}, svg);
     svgEl("text", {x: L - 4, y: Y(v) + 3, "text-anchor": "end"}, svg).textContent = v.toFixed(span < 10 ? 2 : 0); };
   grid(0); if (hi > 0) grid(hi); if (lo < 0) grid(lo);
-  svgEl("text", {x: L, y: H - 5}, svg).textContent = pts[0].date.slice(5);
-  if (pts.length > 1) svgEl("text", {x: W - R, y: H - 5, "text-anchor": "end"}, svg).textContent = pts[pts.length - 1].date.slice(5);
-  svgEl("polyline", {points: series.map((p, i) => X(i) + "," + Y(p.cum)).join(" "), fill: "none", stroke: "var(--s1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
-  const dot = svgEl("circle", {r: 4, fill: "var(--s1)", stroke: "var(--card)", "stroke-width": 2, visibility: "hidden"}, svg);
+  svgEl("text", {x: L, y: H - 5}, svg).textContent = trades[0].date.slice(5);
+  if (trades.length > 1) svgEl("text", {x: W - R, y: H - 5, "text-anchor": "end"}, svg).textContent = trades[trades.length - 1].date.slice(5);
+  svgEl("polyline", {points: series.map((p, i) => X(i) + "," + Y(p.cum)).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+  for (let i = 1; i < series.length; i++) svgEl("circle", {cx: X(i), cy: Y(series[i].cum), r: 3.5, fill: color, stroke: "var(--card)", "stroke-width": 1.5}, svg);
+  const dot = svgEl("circle", {r: 6, fill: "none", stroke: "var(--fg)", "stroke-width": 2, visibility: "hidden"}, svg);
   const tip = document.createElement("div"); tip.className = "tip";
   const show = ev => { const b = svg.getBoundingClientRect(), x = (ev.clientX - b.left) / b.width * W;
     let i = Math.round((x - L) / ((W - L - R) / (series.length - 1))); i = Math.max(1, Math.min(series.length - 1, i)); const p = series[i];
     dot.setAttribute("cx", X(i)); dot.setAttribute("cy", Y(p.cum)); dot.setAttribute("visibility", "visible");
-    tip.textContent = `${p.date}  day ${rs(p.pnl)}  total ${rs(p.cum)}`; tip.style.display = "block";
+    tip.textContent = `${p.date}  ${p.symbol}  trade ${rs(p.pnl)}  total ${rs(p.cum)}`; tip.style.display = "block";
     tip.style.left = Math.min(b.width - tip.offsetWidth, Math.max(0, X(i) / W * b.width - tip.offsetWidth / 2)) + "px"; tip.style.top = (svg.offsetTop + Y(p.cum) / H * b.height - 34) + "px"; };
   svg.onpointermove = show; svg.onpointerdown = show; svg.onpointerleave = () => { dot.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
   card.append(svg, tip); }
@@ -885,6 +921,11 @@ function hookStatus(h) {  // is this webhook actually running right now, and if 
   if (t.capital + r.capital_per_stock > (t.max_capital ?? r.max_daily_capital)) return {text: "Capital limit", s: "warn"};
   return {text: "Running", s: "ok"}; }
 setInterval(() => { if (!document.hidden && $("mainView").dataset.p === "hooks" && $("accountView").classList.contains("hidden") && !document.querySelector(".ovl:not(.hidden):not(#modal)")) renderHooks(); }, 30000);  // statuses follow the clock (no network: the rules are already loaded)
+const RESET_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 3 3 9 9 9"/></svg>';
+async function toggleHook(h) { const r = await api("webhooks/" + h.id + "/toggle", {enabled: !h.rules.enabled});
+  if (!r.ok) return msg($("hookMsg"), r.data.error || "failed", false); loadAuto(); }
+async function resetHook(h) { if (!confirm(`Reset today's limits for "${h.name}"?\nTrades and capital used go back to 0 and today's +/- limit changes are dropped. Open positions are not touched.`)) return;
+  const r = await api("webhooks/" + h.id + "/reset", {}); if (!r.ok) return msg($("hookMsg"), r.data.error || "failed", false); loadAuto(); }
 function renderHooks() { const t = $("hookTable"); t.textContent = "";
   if (!hooks.length) { t.textContent = "No webhooks yet. Use + to add one."; return; }
   t.append(row(["Name", "Status", "Mode", "Side", "Trades", "Value (₹)", ""], "th"));
@@ -892,8 +933,11 @@ function renderHooks() { const t = $("hookTable"); t.textContent = "";
     const u = document.createElement("span"); u.hidden = true; u.id = "hu_" + h.id; u.textContent = h.url;
     const cp = document.createElement("button"); cp.className = "copy ibtn"; cp.dataset.src = u.id; cp.title = "Copy webhook URL"; cp.setAttribute("aria-label", "Copy webhook URL"); cp.innerHTML = COPY_SVG;
     const acts = document.createElement("span"); acts.className = "racts";
-    acts.append(u, cp, iconBtn(CHART_SVG, "Performance", "", () => openPerf(h)), iconBtn(PENCIL_SVG, "Edit", "", () => editHook(h.id)), iconBtn(TRASH_SVG, "Delete", "del", () => delHook(h.id)));
-    const hs = hookStatus(h), tr = row([h.name, hs.text, h.rules.mode === "live" ? "LIVE" : "DEMO", h.rules.side, String(h.today.trades), String(h.today.capital), acts]);
+    const sw = document.createElement("button"); sw.className = "sw"; sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", String(h.rules.enabled));
+    sw.title = h.rules.enabled ? "Turn off" : "Turn on"; sw.setAttribute("aria-label", sw.title + " " + h.name); sw.onclick = () => toggleHook(h);
+    acts.append(u, cp, iconBtn(RESET_SVG, "Reset today's limits", "", () => resetHook(h)), iconBtn(CHART_SVG, "Performance", "", () => openPerf(h)), iconBtn(PENCIL_SVG, "Edit", "", () => editHook(h.id)), iconBtn(TRASH_SVG, "Delete", "del", () => delHook(h.id)));
+    const hs = hookStatus(h), tr = row([h.name, hs.text, h.rules.mode === "live" ? "LIVE" : "PAPER", h.rules.side, String(h.today.trades), String(h.today.capital), acts]);
+    tr.append(sw);  // sits in the card's top-right corner (see CSS)
     tr.children[1].dataset.s = hs.s; tr.children[1].title = "Webhook status";
     if (h.id === hookId) tr.classList.add("sel"); t.append(tr); } }
 async function loadScripInfo() {  // which broker's scrip master the symbol search is using
@@ -1007,13 +1051,27 @@ async function loadAutoLog() { const day = $("logDay").value; const r = await ap
            : JSON.stringify({status: e.status, pnl: e.pnl, decisions: e.decisions}, null, 2));
     const tr = row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.mode || "live", tpsl || exit || man || tmo ? "" : e.scan, e.event === "entry_resend" ? `Re-sent entry: ${e.symbol} (attempt ${e.attempt})` : tmo ? `Cancelled unfilled ${e.event === "entry_timeout" ? "entry" : "exit"}: ${e.symbol} (after ${e.after}s)${e.gave_up ? " - not retried" : ""}` : man ? `${e.order.side} ${e.order.qty} ${e.symbol} @ ${e.order.price || "MARKET"} (${e.order.order_type})${e.code === 200 ? "" : " - " + ((e.body && e.body.error) || "failed")}` : tpsl ? `${e.reason} exit: ${e.symbol} @ ${e.price}` : exit ? "Exit " + (e.time || "") : alertInfo(e), String(n), vb]); markRow(tr, e); t.append(tr); }
   paintAlerts(r.data); initialLoad = false; }
+function symOutcome(e, sym) {  // "ok" placed (or paper-placed), "bad" rejected / alert blocked, "neu" skipped, stopped or ignored
+  const d = (e.decisions || []).find(x => String(x.symbol).toUpperCase() === String(sym).toUpperCase());
+  if (d) { const a = String(d.action); return a === "PLACED" || /^(DEMO|DRY)/.test(a) ? "ok" : a === "REJECTED" ? "bad" : "neu"; }
+  return /^blocked/.test(e.status || "") ? "bad" : "neu"; }
+function symDetail(e, sym, trig) {  // everything the log knows about one symbol of one alert, in plain words first
+  const d = (e.decisions || []).find(x => String(x.symbol).toUpperCase() === String(sym).toUpperCase()), a = d ? String(d.action) : "";
+  const status = d ? (a === "PLACED" ? "Order placed" : /^(DEMO|DRY)/.test(a) ? "Paper order placed (simulated)" : a === "REJECTED" ? "Order rejected by the broker"
+      : a === "stop" ? "Stopped: " + (d.reason || "limit reached") : "Skipped: " + (d.reason || "no reason recorded"))
+    : /^(blocked|ignored)/.test(e.status || "") ? "Not processed - alert " + e.status : "Not processed - an earlier limit stopped the alert, or it was beyond stocks per alert";
+  const out = {symbol: sym, status, webhook: e.webhook || "Default", mode: e.mode === "live" ? "LIVE" : "PAPER", scan: e.scan, alert_time: new Date(e.ts * 1000).toLocaleString(), trigger_price: trig || undefined, alert_status: e.status};
+  if (d) { const {symbol, action, ...rest} = d; out.action = a; out.details = rest; }
+  return out; }
 function alertSymbols(e) {  // one tag per symbol: the name, then its trigger price when the payload has one
   const p = e.payload || {}, list = x => (Array.isArray(x) ? x : String(x ?? "").split(",")).map(v => String(v).trim()).filter(Boolean);
   let syms = list(p.stocks ?? p.symbol); const px = list(p.trigger_prices);
   if (!syms.length) syms = (e.symbols || []).map(String);
   const box = document.createElement("div"); box.className = "chips";
-  syms.forEach((sym, i) => { const c = document.createElement("span"); c.className = "chip"; c.append(sym);
+  syms.forEach((sym, i) => { const c = document.createElement("span"); c.className = "chip chip-" + symOutcome(e, sym); c.append(sym);
     if (px[i] && syms.length === list(p.stocks ?? p.symbol).length) { const v = document.createElement("i"); v.textContent = "@" + px[i]; c.append(v); }
+    c.setAttribute("role", "button"); c.tabIndex = 0; c.title = "Show status"; const trig = px[i] && syms.length === list(p.stocks ?? p.symbol).length ? px[i] : "", open = () => showBox(sym + " - status", JSON.stringify(symDetail(e, sym, trig), null, 2));
+    c.onclick = open; c.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } };
     box.append(c); });
   return box; }
 function paintAlerts(data) {  // alerts received (newest first), each with its raw JSON
@@ -1024,7 +1082,7 @@ function paintAlerts(data) {  // alerts received (newest first), each with its r
     const jb = document.createElement("button"); jb.textContent = "JSON"; jb.style.padding = "2px 8px";
     jb.onclick = () => showBox("Webhook JSON", (e.payload !== undefined ? "" : "(webhook JSON not recorded for this alert; showing what was logged)\n") +
       JSON.stringify(e.payload !== undefined ? e.payload : {scan: e.scan, symbols: e.symbols}, null, 2));
-    const tr = row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.scan, alertSymbols(e), jb]); markRow(tr, e); t.append(tr); } }
+    const tr = row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.scan, alertSymbols(e), jb]); t.append(tr); } }
 $("perfClose").onclick = () => $("perfModal").classList.add("hidden");
 $("perfModal").onclick = e => { if (e.target === $("perfModal")) $("perfModal").classList.add("hidden"); };
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("perfModal").classList.add("hidden"); });

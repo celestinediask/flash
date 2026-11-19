@@ -957,15 +957,87 @@ def funds():
     return jsonify(body), code
 
 
+def _paper_today():
+    today = datetime.datetime.now(IST).strftime("%Y-%m-%d")
+    return [t for t in paper_trades() if t["day"] == today]
+
+
+def _paper_position(t):
+    """A paper trade in the broker's position shape. Open: unrealised P&L at the current quote; closed: realised."""
+    long_ = t["side"] == "BUY"
+    px = t.get("exit")
+    if t["status"] == "open":
+        q = get_quote(t["symbol"], "NSE_EQ")
+        px = q["price"] if q else None
+    pl = round((1 if long_ else -1) * (px - t["entry"]) * t["qty"], 2) if px else 0.0
+    closed = t["status"] == "closed"
+    return {"symbol": t["symbol"], "product": "INTRADAY", "mode": "paper", "id": t["id"],
+            "net_qty": 0 if closed else t["qty"] * (1 if long_ else -1),
+            "buy_qty": t["qty"] if long_ or closed else 0, "sell_qty": t["qty"] if not long_ or closed else 0,
+            "buy_avg": t["entry"] if long_ else (px or 0) if closed else 0,
+            "sell_avg": (px or 0) if long_ and closed else 0 if long_ else t["entry"],
+            "realized_pnl": pl if closed else 0.0, "unrealized_pnl": 0.0 if closed else pl, "last_price": px}
+
+
+def _paper_orders(t):
+    iso = lambda ts: datetime.datetime.fromtimestamp(ts, IST).strftime("%Y-%m-%dT%H:%M:%S")
+    o = lambda oid, ts, side, why: {"order_id": oid, "time": iso(ts), "symbol": t["symbol"], "side": side, "order_type": "MARKET",
+                                    "qty": t["qty"], "price": 0, "status": "FILLED", "message": why, "mode": "paper"}
+    out = [o(f"paper-{t['id']}-in", t["ts"], t["side"], f"price {t['entry']}")]
+    if t["status"] == "closed":
+        out.append(o(f"paper-{t['id']}-out", t["exit_ts"], "SELL" if t["side"] == "BUY" else "BUY", f"{t['reason']} @ {t['exit']}"))
+    return out
+
+
 @app.get("/api/positions")
 def positions():
     code, body = broker.positions()
+    if code == 200 and isinstance(body, list):
+        body = [{**p, "mode": "live"} for p in body] + [_paper_position(t) for t in _paper_today() if t["status"] != "expired"]
+    return jsonify(body), code
+
+
+@app.post("/api/position/exit")
+def position_exit():
+    """Square off one open position now: a live one with a MARKET order, a paper one at the current quote."""
+    d = request.get_json(silent=True) or {}
+    if d.get("mode") == "paper":
+        with _auto_lock:
+            st = paper_load()
+            t = next((x for x in st["trades"] if x["id"] == d.get("id") and x["status"] == "open"), None)
+            if not t:
+                return bad("no such open paper position", 404)
+            q = get_quote(t["symbol"], "NSE_EQ")
+            if not q:
+                return bad("no live price (quote fetch failed)", 502)
+            _paper_close(t, q["price"], "MANUAL")
+            db.set_state(PAPER_SCOPE, st)
+            auto_log(event="tpsl_exit", webhook=t["name"], mode="dry", symbol=t["symbol"], reason="MANUAL", price=q["price"],
+                     avg=t["entry"], tp=t["tp"], sl=t["sl"], http=200, response={"demo": True, "pnl": t["pnl"]})
+        return jsonify(status="closed", price=q["price"], pnl=t["pnl"])
+    symbol, product = str(d.get("symbol", "")), str(d.get("product", ""))
+    code, pos = broker.positions()
+    if code != 200 or not isinstance(pos, list):
+        return bad(f"positions unavailable ({code})", 502)
+    p = next((x for x in pos if x["symbol"] == symbol and x["product"] == product and x["net_qty"]), None)
+    if not p:
+        return bad("no such open position", 404)
+    cid = uuid.uuid4().hex[:20]
+    order = broker.make_order(side="SELL" if p["net_qty"] > 0 else "BUY", exchange=p["exchange"], product=p["product"],
+                              order_type="MARKET", security_id=p["security_id"], qty=abs(p["net_qty"]), correlation_id=cid)
+    with _lock:  # square-off reduces risk, so it works even with the master Trading switch off
+        audit("position_exit_submit", order=order)
+        code, body = broker.place_order(order)
+        audit("position_exit_result", code=code, body=body, correlationId=cid)
     return jsonify(body), code
 
 
 @app.get("/api/orders")
 def orders():
     code, body = broker.orders()
+    if code == 200 and isinstance(body, list):
+        body = [{**o, "mode": "live"} for o in body] + [x for t in _paper_today() if t["status"] != "expired" for x in _paper_orders(t)]
+        body.sort(key=lambda o: o.get("time") or "", reverse=True)
     return jsonify(body), code
 
 
@@ -1394,6 +1466,92 @@ def auto_log(**kw):
     db.add_auto_log(**kw)
 
 
+# ---------- paper trading (DEMO webhooks) ----------
+# A demo alert places no order, so it is tracked here as a virtual position: filled at the quote price, closed by the
+# same TP/SL and exit-time rules as a live trade, and fed into the webhook's performance numbers. One state row.
+PAPER_SCOPE = "paper"
+PAPER_MAX_QUOTE_AGE = 300  # seconds; TP/SL is not judged on a quote older than this (market closed / feed stale)
+
+
+def paper_load():
+    return db.get_state(PAPER_SCOPE) or {"trades": []}
+
+
+def paper_trades(hook_id=None):
+    return [t for t in paper_load()["trades"] if hook_id is None or t["hook"] == hook_id]
+
+
+def paper_open_symbols(hook):
+    return {t["symbol"] for t in paper_trades(hook["id"]) if t["status"] == "open"}
+
+
+def paper_open(hook, d, side, tick, now):
+    st = paper_load()
+    st["trades"].append({"id": uuid.uuid4().hex[:12], "hook": hook["id"], "name": hook["name"], "symbol": d["symbol"],
+                         "side": side, "qty": d["qty"], "entry": d["price"], "tp": d.get("tp"), "sl": d.get("sl"),
+                         "tick": tick, "day": now.strftime("%Y-%m-%d"), "ts": time.time(), "status": "open"})
+    db.set_state(PAPER_SCOPE, st)
+
+
+def _paper_close(t, px, reason):
+    sgn = 1 if t["side"] == "BUY" else -1
+    t.update(status="closed", exit=px, reason=reason, exit_ts=time.time(), pnl=round(sgn * (px - t["entry"]) * t["qty"], 2))
+
+
+def paper_scan(hook, now):
+    """Close this webhook's open paper positions that hit TP/SL. Positions from an earlier day are expired (never judged)."""
+    st = paper_load()
+    today, dirty = now.strftime("%Y-%m-%d"), False
+    for t in st["trades"]:
+        if t["hook"] != hook["id"] or t["status"] != "open":
+            continue
+        if t["day"] != today:
+            t["status"] = "expired"
+            dirty = True
+            continue
+        if not t.get("tp"):
+            continue
+        q = get_quote(t["symbol"], "NSE_EQ")
+        if not q or q["age"] > PAPER_MAX_QUOTE_AGE:
+            continue
+        px, long_ = q["price"], t["side"] == "BUY"
+        hit = ("TP" if px >= t["tp"] else "SL" if px <= t["sl"] else None) if long_ else \
+              ("TP" if px <= t["tp"] else "SL" if px >= t["sl"] else None)
+        if not hit:
+            continue
+        _paper_close(t, px, hit)
+        auto_log(event="tpsl_exit", webhook=hook["name"], mode="dry", symbol=t["symbol"], reason=hit, price=px,
+                 avg=t["entry"], tp=t["tp"], sl=t["sl"], http=200, response={"demo": True, "pnl": t["pnl"]})
+        dirty = True
+    if dirty:
+        db.set_state(PAPER_SCOPE, st)
+
+
+def paper_square_off(hook, now):
+    """Exit time: close every open paper position of today at the current quote. Returns (log steps, all closed)."""
+    st = paper_load()
+    today, steps, ok, dirty = now.strftime("%Y-%m-%d"), [], True, False
+    for t in st["trades"]:
+        if t["hook"] != hook["id"] or t["status"] != "open":
+            continue
+        if t["day"] != today:
+            t["status"] = "expired"
+            dirty = True
+            continue
+        q = get_quote(t["symbol"], "NSE_EQ")
+        if not q:
+            steps.append(f"no price for {t['symbol']}; will retry")
+            ok = False
+            continue
+        _paper_close(t, q["price"], "EXIT")
+        side = "SELL" if t["side"] == "BUY" else "BUY"
+        steps.append(f"DEMO would {side} {t['qty']} {t['symbol']} @ {q['price']} (P&L {t['pnl']})")
+        dirty = True
+    if dirty:
+        db.set_state(PAPER_SCOPE, st)
+    return steps, ok
+
+
 def parse_alert(payload):
     """Chartink sends {"stocks": "A,B,C", "trigger_prices": "1,2,3", "scan_name": ...}."""
     raw = payload.get("stocks", payload.get("symbol", ""))
@@ -1438,6 +1596,8 @@ def run_auto(payload, hook):
     except requests.RequestException as e:
         return done(f"blocked: positions unavailable ({e})")
     held = {p["symbol"] for p in pos if p.get("net_qty")}
+    if not live:
+        held |= paper_open_symbols(hook)  # virtual positions count against max positions / duplicates
     pnl = sum(p["realized_pnl"] + p["unrealized_pnl"] for p in pos)
     state = auto_state(now.strftime("%Y-%m-%d"), hook)
     max_loss = day_limit(rules, state, "loss")
@@ -1508,6 +1668,7 @@ def run_auto(payload, hook):
              "internal_tpsl": use_tpsl, "tp": tp, "sl": sl, "limit": lp}
         if not live:
             decisions.append({**d, "action": "DRY-RUN would place"})
+            paper_open(hook, d, rules["side"], tick, now)
             state["trades"] += 1  # simulate caps within this alert only; not saved
             state["capital"] += value
             held.add(sym)
@@ -1554,6 +1715,9 @@ def run_exit(now, hook):
     if state.get("exit_done"):
         return
     log = {"event": "exit", "webhook": hook["name"], "mode": rules["mode"], "time": now.strftime("%H:%M"), "steps": []}
+    if rules["mode"] != "live":  # demo: square off the virtual positions at the current quote
+        log["steps"], ok = paper_square_off(hook, now)
+        return _exit_finish(state, log, hook, retry=not ok)
     try:
         code, pos = broker.positions()
         if code != 200 or not isinstance(pos, list):
@@ -1770,6 +1934,7 @@ def entry_timeout_scan(state, label, rules):
 
 def tpsl_check(now, hook):
     if hook["rules"]["mode"] != "live":
+        paper_scan(hook, now)
         return
     state = auto_state(now.strftime("%Y-%m-%d"), hook)
     if state.get("exit_done") and not state.get("exit_gave_up"):  # a finished square-off has nothing left to watch; a gave-up one still does
@@ -1896,6 +2061,7 @@ def _perf():
         trades += [t for t in tod if (t["order_id"], t["trade_id"], t["time"]) not in seen]
     out = {}
     for name, oids in ids.items():
+        paper = paper_trades(name)
         by = {}  # (day, symbol) -> [buy qty, buy value, sell qty, sell value]
         for t in trades:
             if t["order_id"] not in oids:
@@ -1907,7 +2073,7 @@ def _perf():
                 a[0] += q; a[1] += v
             else:
                 a[2] += q; a[3] += v
-        days, wins, closed, open_ = {}, 0, 0, 0
+        closed_list, wins, closed, open_ = [], 0, 0, 0
         for (day, sym), (bq, bv, sq, sv) in sorted(by.items()):
             if bq != sq or not bq:
                 open_ += 1  # not squared off yet: no realised P&L
@@ -1915,11 +2081,19 @@ def _perf():
             pnl = round(sv - bv, 2)
             closed += 1
             wins += pnl > 0
-            days[day] = round(days.get(day, 0) + pnl, 2)
+            closed_list.append((day, sym, pnl))  # one entry per closed trade, in day order
+        for t in paper:  # demo (paper) trades of this webhook
+            if t["status"] == "closed":
+                closed += 1
+                wins += t["pnl"] > 0
+                closed_list.append((t["day"], t["symbol"], t["pnl"]))
+            else:
+                open_ += 1
+        closed_list.sort(key=lambda x: x[0])
         cum, pts = 0.0, []
-        for day in sorted(days):
-            cum = round(cum + days[day], 2)
-            pts.append({"date": day, "pnl": days[day], "cum": cum})
+        for day, sym, pnl in closed_list:
+            cum = round(cum + pnl, 2)
+            pts.append({"date": day, "symbol": sym, "pnl": pnl, "cum": cum})
         out[name] = {"points": pts, "trades": closed, "wins": wins, "open": open_, "total": cum}
     _perf_cache.update(ts=time.time(), data=out)
     return out
@@ -2030,6 +2204,44 @@ def extend_daily(hid):
         db.set_state(hook_scope(h), st)
     audit("webhook_daily_limit_changed", id=hid, name=h["name"], what=what, change=amount, extra_today=st[key], ip=request.remote_addr)
     return jsonify(ok=True)
+
+
+@app.post("/api/webhooks/<hid>/toggle")
+def toggle_webhook(hid):
+    """Switch one webhook on or off without touching its other rules. Body: {"enabled": true|false}."""
+    d = request.get_json(silent=True) or {}
+    if not isinstance(d.get("enabled"), bool):
+        return bad("enabled must be true or false")
+    with _lock:
+        hooks = load_hooks()
+        h = next((x for x in hooks if x["id"] == hid), None)
+        if not h:
+            return bad("not found", 404)
+        h["rules"]["enabled"] = d["enabled"]
+        save_hooks(hooks)
+    audit("webhook_toggled", id=hid, name=h["name"], enabled=d["enabled"], ip=request.remote_addr)
+    return jsonify(_hook_json(h, datetime.datetime.now(IST).strftime("%Y-%m-%d")))
+
+
+@app.post("/api/webhooks/<hid>/reset")
+def reset_limits(hid):
+    """Reset today's usage for one webhook: trades and capital used back to 0, cooldowns cleared, and any
+    one-day limit changes (the +/- on the Home page) dropped, so the saved limits apply in full again.
+    Open positions and the exit/TP-SL tracking are left alone. The daily-loss limit follows the broker's
+    real P&L, which cannot be reset."""
+    with _lock:
+        h = next((x for x in load_hooks() if x["id"] == hid), None)
+        if not h:
+            return bad("not found", 404)
+        with _auto_lock:
+            st = auto_state(datetime.datetime.now(IST).strftime("%Y-%m-%d"), h)
+            was = {"trades": st["trades"], "capital": st["capital"]}
+            st["trades"], st["capital"], st["last"] = 0, 0.0, {}
+            for k in [k for k in st if k.startswith("extra_")]:
+                del st[k]
+            db.set_state(hook_scope(h), st)
+    audit("webhook_limits_reset", id=hid, name=h["name"], was=was, ip=request.remote_addr)
+    return jsonify(_hook_json(h, datetime.datetime.now(IST).strftime("%Y-%m-%d")))
 
 
 @app.post("/api/webhooks/<hid>/delete")
