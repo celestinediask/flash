@@ -84,6 +84,29 @@ class Sim:
     def creds_ok(self, h):
         return h.get("app_id") == self.ident["api_key"] and h.get("app_secret") == self.ident["api_secret"]
 
+    def seed(self, pnls):
+        """Test only: add closed round trips, one share each: buy at a stock's price, sell pnl higher or lower.
+        Returns [[buy_order_id, sell_order_id], ...]."""
+        out = []
+        for i, pnl in enumerate(pnls):
+            sym, _, sid, base = STOCKS[i % len(STOCKS)]
+            pair = []
+            for side, px in (("BUY", round(base, 2)), ("SELL", round(base + pnl, 2))):
+                self.n += 1
+                oid = str(240100000 + self.n)
+                self.orders[oid] = {"orderId": oid, "dhanClientId": self.client, "correlationId": "", "orderStatus": "TRADED",
+                                    "transactionType": side, "exchangeSegment": "NSE_EQ", "productType": "INTRADAY",
+                                    "orderType": "MARKET", "validity": "DAY", "tradingSymbol": sym, "securityId": sid,
+                                    "quantity": 1, "price": 0.0, "filledQty": 1, "averageTradedPrice": px,
+                                    "createTime": self.now(), "updateTime": self.now(), "omsErrorDescription": "",
+                                    "fill_at": None, "ref": px}
+                self.trades.append({"orderId": oid, "exchangeTradeId": f"T{len(self.trades) + 1:08d}", "exchangeTime": self.now(),
+                                    "tradingSymbol": sym, "securityId": sid, "transactionType": side,
+                                    "tradedQuantity": 1, "tradedPrice": px})
+                pair.append(oid)
+            out.append(pair)
+        return out
+
     def now(self):
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -328,7 +351,9 @@ class H(BaseHTTPRequestHandler):
             if self.command == "GET" and path == "/fundlimit":
                 return self.reply(200, {"dhanClientId": sim.client, "availabelBalance": round(sim.balance, 2), "sodLimit": 100000.0, "utilizedAmount": round(100000 - sim.balance, 2)})
             if self.command == "GET" and (path == "/trades" or path.startswith("/trades/")):
-                return self.reply(200, list(reversed(sim.trades)))
+                # like the real broker: page 0 holds the trades, later pages are empty (the app stops at an empty page)
+                page = path.rsplit("/", 1)[-1] if path.startswith("/trades/") and path.count("/") >= 3 else "0"
+                return self.reply(200, list(reversed(sim.trades)) if page == "0" else [])
             if self.command == "GET" and path == "/super/orders":
                 return self.reply(200, [])
         self.reply(404, {"errorType": "Not_Found", "errorCode": "DH-404", "errorMessage": f"No such endpoint {self.command} {path}"})
@@ -340,7 +365,7 @@ class H(BaseHTTPRequestHandler):
 
 
 def commands():
-    print("Commands: help, mode NAME, expire, fill ID|all, cancel-all, funds N, latency MIN MAX, reset, status, orders, quit")
+    print("Commands: help, mode NAME, expire, fill ID|all, cancel-all, funds N, latency MIN MAX, seed PNL..., reset, status, orders, quit")
     for line in sys.stdin:
         a = line.split()
         if not a:
@@ -366,6 +391,8 @@ def commands():
                     sim.balance = float(args[0]); print(f"funds = {sim.balance:.2f}")
                 elif c == "latency":
                     sim.lat = (float(args[0]), float(args[1])); print(f"latency = {sim.lat}")
+                elif c == "seed":  # test only: closed round trips with chosen P&L, e.g. seed 120 -40 300
+                    print("SEEDED " + json.dumps(sim.seed([float(x) for x in args])))
                 elif c == "reset":
                     sim.reset(); print("all orders, positions and funds reset")
                 elif c == "status":
