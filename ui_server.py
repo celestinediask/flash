@@ -1565,7 +1565,8 @@ def parse_alert(payload):
     return out[:50]
 
 
-def run_auto(payload, hook):
+def run_auto(payload, hook, body=None):
+    """body: the request body exactly as received (kept verbatim in the alert log so the Alerts page can show it as is)."""
     rules, scope = hook["rules"], hook_scope(hook)
     symbols = parse_alert(payload)
     alert = {"scan": str(payload.get("scan_name") or payload.get("alert_name") or "")[:80], "symbols": symbols}
@@ -1574,8 +1575,9 @@ def run_auto(payload, hook):
 
     def done(status, decisions=(), **kw):
         raw = json.dumps(payload)
+        extra = {} if body is None else {"raw": body if len(body) <= 4000 else body[:4000] + "...(truncated)"}
         auto_log(event="alert", webhook=hook["name"], status=status, mode=rules["mode"], decisions=list(decisions),
-                 payload=payload if len(raw) <= 4000 else raw[:4000] + "...(truncated)", **alert, **kw)
+                 payload=payload if len(raw) <= 4000 else raw[:4000] + "...(truncated)", **extra, **alert, **kw)
         return {"status": status, "mode": rules["mode"], "decisions": list(decisions), **kw}
 
     if not rules["enabled"]:
@@ -1989,7 +1991,7 @@ def alert(secret):
     if not isinstance(payload, dict):
         return bad("JSON object expected")
     with _auto_lock:
-        return jsonify(run_auto(payload, hook))
+        return jsonify(run_auto(payload, hook, request.get_data(as_text=True)))
 
 
 def _hook_json(h, today):

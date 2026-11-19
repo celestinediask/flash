@@ -255,6 +255,9 @@
   #jsonPre { flex: 1; min-height: 0; overflow: auto; font-size: 12px; }
   /* the JSON window: centred, a fixed height, the text scrolls inside it */
   #jsonModal { align-items: center; padding: 16px; box-sizing: border-box; }
+  #jsonModal.small .sheet { height: auto; }
+  #jsonPre[data-tone="ok"] { color: var(--pos); } #jsonPre[data-tone="bad"] { color: var(--neg); } #jsonPre[data-tone="neu"] { color: var(--warn); }  /* same colours as the symbol chips */
+  #jsonModal.small #jsonPre { flex: none; font-size: 14px; word-break: normal; overflow-wrap: anywhere; }
   #jsonModal .sheet { height: min(480px, 80%); max-height: none; border: 1px solid var(--bd); border-radius: 16px; padding-bottom: 16px; overflow: hidden; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; background: var(--sf2); border: 1px solid var(--bd); font-size: 13px; font-weight: 600; }
@@ -1004,8 +1007,9 @@ async function loadLogDays() { const r = await api("auto/log/dates"); if (!r.ok)
   $("logDay").value = r.data.includes(cur) ? cur : r.data[0]; }
 $("logDay").onchange = () => loadAutoLog();
 const JSON_TOKEN = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
-function showBox(title, text) {  // colours JSON tokens by building text nodes and spans (no innerHTML)
-  const pre = $("jsonPre"); pre.textContent = ""; let last = 0;
+function showBox(title, text, plain, small, tone) {  // colours JSON tokens by building text nodes and spans (no innerHTML); plain: show the text untouched
+  const pre = $("jsonPre"); pre.textContent = ""; let last = 0; $("jsonModal").classList.toggle("small", !!small); pre.dataset.tone = tone || "";  // small: the window fits its text
+  if (plain) { pre.textContent = text; $("jsonTitle").textContent = title; $("jsonModal").classList.remove("hidden"); return; }
   for (const m of text.matchAll(JSON_TOKEN)) {
     if (m.index > last) pre.append(text.slice(last, m.index));
     const sp = document.createElement("span"); sp.className = m[1] ? (m[2] ? "k" : "s") : m[3] ? "b" : "n";
@@ -1055,14 +1059,17 @@ function symOutcome(e, sym) {  // "ok" placed (or paper-placed), "bad" rejected 
   const d = (e.decisions || []).find(x => String(x.symbol).toUpperCase() === String(sym).toUpperCase());
   if (d) { const a = String(d.action); return a === "PLACED" || /^(DEMO|DRY)/.test(a) ? "ok" : a === "REJECTED" ? "bad" : "neu"; }
   return /^blocked/.test(e.status || "") ? "bad" : "neu"; }
-function symDetail(e, sym, trig) {  // everything the log knows about one symbol of one alert, in plain words first
+function symStatus(e, sym) {  // the order status of one symbol of one alert, in plain words; not placed: with the reason
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
   const d = (e.decisions || []).find(x => String(x.symbol).toUpperCase() === String(sym).toUpperCase()), a = d ? String(d.action) : "";
-  const status = d ? (a === "PLACED" ? "Order placed" : /^(DEMO|DRY)/.test(a) ? "Paper order placed (simulated)" : a === "REJECTED" ? "Order rejected by the broker"
-      : a === "stop" ? "Stopped: " + (d.reason || "limit reached") : "Skipped: " + (d.reason || "no reason recorded"))
-    : /^(blocked|ignored)/.test(e.status || "") ? "Not processed - alert " + e.status : "Not processed - an earlier limit stopped the alert, or it was beyond stocks per alert";
-  const out = {symbol: sym, status, webhook: e.webhook || "Default", mode: e.mode === "live" ? "LIVE" : "PAPER", scan: e.scan, alert_time: new Date(e.ts * 1000).toLocaleString(), trigger_price: trig || undefined, alert_status: e.status};
-  if (d) { const {symbol, action, ...rest} = d; out.action = a; out.details = rest; }
-  return out; }
+  if (d) {
+    if (a === "PLACED") return "Order placed";
+    if (/^(DEMO|DRY)/.test(a)) return "Paper order placed";
+    if (a === "REJECTED") { const r = d.response || {}, m = r.message || r.error || r.errorMessage || r.remarks || (typeof r === "string" ? r : "");
+      return "Order not placed: rejected by the broker" + (m ? " - " + m : d.http ? " (HTTP " + d.http + ")" : ""); }
+    return "Order not placed: " + cap(d.reason || (a === "stop" ? "limit reached" : "skipped")); }
+  const m = (e.status || "").match(/^(?:blocked|ignored): (.*)/);
+  return "Order not placed: " + (m ? cap(m[1]) : "not reached (an earlier limit stopped this alert, or the stocks-per-alert limit was hit)"); }
 function alertSymbols(e) {  // one tag per symbol: the name, then its trigger price when the payload has one
   const p = e.payload || {}, list = x => (Array.isArray(x) ? x : String(x ?? "").split(",")).map(v => String(v).trim()).filter(Boolean);
   let syms = list(p.stocks ?? p.symbol); const px = list(p.trigger_prices);
@@ -1070,7 +1077,7 @@ function alertSymbols(e) {  // one tag per symbol: the name, then its trigger pr
   const box = document.createElement("div"); box.className = "chips";
   syms.forEach((sym, i) => { const c = document.createElement("span"); c.className = "chip chip-" + symOutcome(e, sym); c.append(sym);
     if (px[i] && syms.length === list(p.stocks ?? p.symbol).length) { const v = document.createElement("i"); v.textContent = "@" + px[i]; c.append(v); }
-    c.setAttribute("role", "button"); c.tabIndex = 0; c.title = "Show status"; const trig = px[i] && syms.length === list(p.stocks ?? p.symbol).length ? px[i] : "", open = () => showBox(sym + " - status", JSON.stringify(symDetail(e, sym, trig), null, 2));
+    c.setAttribute("role", "button"); c.tabIndex = 0; c.title = "Show status"; const open = () => showBox(sym + " - status", symStatus(e, sym), true, true, symOutcome(e, sym));
     c.onclick = open; c.onkeydown = ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } };
     box.append(c); });
   return box; }
@@ -1080,8 +1087,9 @@ function paintAlerts(data) {  // alerts received (newest first), each with its r
   t.append(row(["Time", "Webhook", "Scan", "Symbols", "JSON"], "th"));
   for (const e of al) {
     const jb = document.createElement("button"); jb.textContent = "JSON"; jb.style.padding = "2px 8px";
-    jb.onclick = () => showBox("Webhook JSON", (e.payload !== undefined ? "" : "(webhook JSON not recorded for this alert; showing what was logged)\n") +
-      JSON.stringify(e.payload !== undefined ? e.payload : {scan: e.scan, symbols: e.symbols}, null, 2));
+    jb.onclick = () => e.raw !== undefined ? showBox("Webhook JSON", e.raw, true)  // exactly as received
+      : showBox("Webhook JSON", (e.payload !== undefined ? "" : "(webhook JSON not recorded for this alert; showing what was logged)\n") +
+        JSON.stringify(e.payload !== undefined ? e.payload : {scan: e.scan, symbols: e.symbols}, null, 2));
     const tr = row([new Date(e.ts * 1000).toLocaleTimeString(), e.webhook || "Default", e.scan, alertSymbols(e), jb]); t.append(tr); } }
 $("perfClose").onclick = () => $("perfModal").classList.add("hidden");
 $("perfModal").onclick = e => { if (e.target === $("perfModal")) $("perfModal").classList.add("hidden"); };
